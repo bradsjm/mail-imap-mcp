@@ -122,22 +122,39 @@ async function withImapClient<T>(
   account: AccountConfig,
   fn: (client: ImapFlow) => Promise<T>,
 ): Promise<T> {
-  const client = new ImapFlow({
-    host: account.host,
-    port: account.port,
-    secure: account.secure,
-    auth: {
-      user: account.user,
-      pass: account.pass,
-    },
-  });
+  const maxAttempts = 2;
+  let lastError: unknown;
 
-  await client.connect();
-  try {
-    return await fn(client);
-  } finally {
-    await client.logout().catch(() => undefined);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const client = new ImapFlow({
+      host: account.host,
+      port: account.port,
+      secure: account.secure,
+      auth: {
+        user: account.user,
+        pass: account.pass,
+      },
+      connectionTimeout: CONNECT_TIMEOUT_MS,
+      greetingTimeout: GREETING_TIMEOUT_MS,
+      socketTimeout: SOCKET_TIMEOUT_MS,
+    });
+
+    try {
+      await client.connect();
+      return await fn(client);
+    } catch (error: unknown) {
+      lastError = error;
+      if (!isTransientImapError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+      await client.logout().catch(() => undefined);
+      await delay(300 * attempt);
+    } finally {
+      await client.logout().catch(() => undefined);
+    }
   }
+
+  throw lastError;
 }
 
 function makeError(
@@ -198,6 +215,9 @@ function makeOk(
 }
 
 const WRITE_ENABLED = parseBooleanEnv(process.env['MAIL_IMAP_WRITE_ENABLED'], false);
+const CONNECT_TIMEOUT_MS = parseNumberEnv(process.env['MAIL_IMAP_CONNECT_TIMEOUT_MS'], 30_000);
+const GREETING_TIMEOUT_MS = parseNumberEnv(process.env['MAIL_IMAP_GREETING_TIMEOUT_MS'], 15_000);
+const SOCKET_TIMEOUT_MS = parseNumberEnv(process.env['MAIL_IMAP_SOCKET_TIMEOUT_MS'], 300_000);
 const SEARCH_CURSOR_STORE = new CursorStore({ ttl_ms: 10 * 60 * 1000, max_entries: 200 });
 
 const TOOL_INPUT_SCHEMAS: Readonly<Record<ToolName, z.ZodTypeAny>> = {
@@ -228,6 +248,103 @@ function formatZodError(error: ZodError): string {
 const parseMailSource = simpleParser as unknown as (
   source: NodeJS.ReadableStream | Buffer,
 ) => Promise<ParsedMail>;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isTransientImapError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const record = error as Record<string, unknown>;
+  const code = typeof record.code === 'string' ? record.code : undefined;
+  if (code && ['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'ECONNRESET', 'EAI_AGAIN'].includes(code)) {
+    return true;
+  }
+  const message = typeof record.message === 'string' ? record.message.toLowerCase() : undefined;
+  if (
+    message &&
+    (message.includes('timeout') || message.includes('socket') || message.includes('reset'))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function mapImapError(error: unknown): { message: string; meta?: Record<string, unknown> } {
+  if (!error || typeof error !== 'object') {
+    return { message: 'Unknown IMAP error.' };
+  }
+  const record = error as Record<string, unknown>;
+  const code = typeof record.code === 'string' ? record.code : undefined;
+  const responseStatus =
+    typeof record.responseStatus === 'string' ? record.responseStatus : undefined;
+  const responseText = typeof record.responseText === 'string' ? record.responseText : undefined;
+  const message = typeof record.message === 'string' ? record.message : undefined;
+  const lower = `${responseText ?? ''} ${message ?? ''}`.toLowerCase();
+
+  if (lower.includes('authentication') || lower.includes('auth failed')) {
+    return {
+      message:
+        'Authentication failed. Verify credentials (or app password/OAuth token) and account access.',
+      meta: { code, response_status: responseStatus },
+    };
+  }
+  if (
+    lower.includes('mailbox') &&
+    (lower.includes('does not exist') || lower.includes('unknown'))
+  ) {
+    return {
+      message: 'Mailbox not found. Verify the mailbox name.',
+      meta: { response_status: responseStatus },
+    };
+  }
+  if (lower.includes('trycreate')) {
+    return {
+      message: 'Mailbox not found. It may need to be created.',
+      meta: { response_status: responseStatus },
+    };
+  }
+  if (code && ['ENOTFOUND', 'ECONNREFUSED', 'EAI_AGAIN'].includes(code)) {
+    return {
+      message: 'Unable to connect to the IMAP server. Check host, port, and DNS.',
+      meta: { code },
+    };
+  }
+  if (code && ['ETIMEDOUT', 'ESOCKETTIMEDOUT'].includes(code)) {
+    return {
+      message: 'IMAP connection timed out. Check network connectivity and server status.',
+      meta: { code },
+    };
+  }
+  if (responseStatus === 'BYE') {
+    return {
+      message: 'IMAP server closed the connection.',
+      meta: { response_status: responseStatus },
+    };
+  }
+
+  return {
+    message: 'IMAP operation failed. Check server logs or credentials.',
+    meta: { code, response_status: responseStatus },
+  };
+}
+
+function toErrorLog(error: unknown): Record<string, unknown> | undefined {
+  if (!error) {
+    return undefined;
+  }
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message };
+  }
+  if (typeof error === 'string') {
+    return { message: error };
+  }
+  return { message: 'Unknown error' };
+}
 
 function truncateText(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
@@ -409,6 +526,7 @@ export function createServer(): Server {
 
     const toolName = request.params.name as ToolName;
     const rawArgs = request.params.arguments;
+    let errorForLog: unknown;
 
     try {
       const tool = TOOL_DEFINITIONS.find((definition) => definition.name === toolName);
@@ -1215,6 +1333,10 @@ export function createServer(): Server {
       }
 
       return makeError(`Tool '${String(toolName)}' is registered but not implemented yet.`);
+    } catch (error: unknown) {
+      errorForLog = error;
+      const mapped = mapImapError(error);
+      return makeError(mapped.message, [], mapped.meta);
     } finally {
       const durationMs = Number(process.hrtime.bigint() - startedAtNs) / 1_000_000;
       console.error(
@@ -1224,6 +1346,7 @@ export function createServer(): Server {
           tool: toolName,
           duration_ms: Math.round(durationMs),
           arguments: scrubSecrets(rawArgs),
+          error: toErrorLog(errorForLog),
         }),
       );
     }
