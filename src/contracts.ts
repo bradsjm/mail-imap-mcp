@@ -19,6 +19,10 @@ export type ToolDefinition = Readonly<{
 
 const AccountIdSchema = z.string().min(1).max(64).describe('Configured IMAP account identifier.');
 
+const DefaultAccountIdSchema = AccountIdSchema.default('default').describe(
+  "Configured IMAP account identifier. Defaults to 'default' if omitted.",
+);
+
 const MailboxSchema = z.string().min(1).max(256).describe('Mailbox name (e.g., INBOX).');
 
 const DateSchema = z
@@ -44,13 +48,13 @@ const FlagSchema = z.string().min(1).max(64).describe('IMAP system or user flag 
 
 export const ListMailboxesInputSchema = z
   .object({
-    account_id: AccountIdSchema,
+    account_id: DefaultAccountIdSchema,
   })
   .strict();
 
 export const SearchMessagesInputSchema = z
   .object({
-    account_id: AccountIdSchema,
+    account_id: DefaultAccountIdSchema,
     mailbox: MailboxSchema,
     query: z.string().min(1).max(256).optional(),
     from: z.string().min(1).max(256).optional(),
@@ -66,7 +70,7 @@ export const SearchMessagesInputSchema = z
 
 export const GetMessageInputSchema = z
   .object({
-    account_id: AccountIdSchema,
+    account_id: DefaultAccountIdSchema,
     message_id: MessageIdSchema,
     body_max_chars: z.number().int().min(100).max(20000).default(2000),
     include_headers: z.boolean().default(true),
@@ -76,7 +80,7 @@ export const GetMessageInputSchema = z
 
 export const GetMessageRawInputSchema = z
   .object({
-    account_id: AccountIdSchema,
+    account_id: DefaultAccountIdSchema,
     message_id: MessageIdSchema,
     max_bytes: z.number().int().min(1024).max(1_000_000).default(200_000),
   })
@@ -84,7 +88,7 @@ export const GetMessageRawInputSchema = z
 
 export const UpdateMessageFlagsInputSchema = z
   .object({
-    account_id: AccountIdSchema,
+    account_id: DefaultAccountIdSchema,
     message_id: MessageIdSchema,
     add_flags: z.array(FlagSchema).min(1).max(20).optional(),
     remove_flags: z.array(FlagSchema).min(1).max(20).optional(),
@@ -102,7 +106,7 @@ export const UpdateMessageFlagsInputSchema = z
 
 export const MoveMessageInputSchema = z
   .object({
-    account_id: AccountIdSchema,
+    account_id: DefaultAccountIdSchema,
     message_id: MessageIdSchema,
     destination_mailbox: MailboxSchema,
   })
@@ -110,7 +114,7 @@ export const MoveMessageInputSchema = z
 
 export const DeleteMessageInputSchema = z
   .object({
-    account_id: AccountIdSchema,
+    account_id: DefaultAccountIdSchema,
     message_id: MessageIdSchema,
     confirm: z.literal(true).describe('Must be true to delete the message.'),
   })
@@ -229,48 +233,49 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   {
     name: 'mail_imap_list_mailboxes',
     description:
-      'List mailboxes for an IMAP account. Use this to discover valid mailbox names (e.g., INBOX). Returns a concise list.',
+      "List mailboxes for an IMAP account. Use this to discover valid mailbox names (e.g., INBOX). If account_id is omitted, defaults to 'default'. Returns a concise list.",
     inputSchema: ListMailboxesInputSchema,
     outputSchema: ListMailboxesResultSchema,
   },
   {
     name: 'mail_imap_search_messages',
     description:
-      'Search messages in a mailbox by sender/subject/date/unread. Returns paginated summaries (token-efficient).',
+      "List or search messages in a mailbox by sender/subject/date/unread. If account_id is omitted, defaults to 'default'. Returns paginated summaries (token-efficient).",
     inputSchema: SearchMessagesInputSchema,
     outputSchema: SearchMessagesResultSchema,
   },
   {
     name: 'mail_imap_get_message',
     description:
-      'Fetch a single message by stable identifier and return headers + a bounded text snippet (optionally sanitized HTML).',
+      "Fetch a single message by stable identifier and return headers + a bounded text snippet (optionally sanitized HTML). If account_id is omitted, defaults to 'default'.",
     inputSchema: GetMessageInputSchema,
     outputSchema: GetMessageResultSchema,
   },
   {
     name: 'mail_imap_get_message_raw',
     description:
-      'Fetch raw message source (RFC822) for a single message. Gated and size-limited; not returned by default.',
+      "Fetch raw message source (RFC822) for a single message. If account_id is omitted, defaults to 'default'. Gated and size-limited; not returned by default.",
     inputSchema: GetMessageRawInputSchema,
     outputSchema: GetMessageRawResultSchema,
   },
   {
     name: 'mail_imap_update_message_flags',
     description:
-      'Update flags on a message (e.g., mark read/unread). Write operations are disabled by default.',
+      "Update flags on a message (e.g., mark read/unread). If account_id is omitted, defaults to 'default'. Write operations are disabled by default.",
     inputSchema: UpdateMessageFlagsInputSchema,
     outputSchema: UpdateMessageFlagsResultSchema,
   },
   {
     name: 'mail_imap_move_message',
-    description: 'Move a message to another mailbox. Write operations are disabled by default.',
+    description:
+      "Move a message to another mailbox. If account_id is omitted, defaults to 'default'. Write operations are disabled by default.",
     inputSchema: MoveMessageInputSchema,
     outputSchema: MoveMessageResultSchema,
   },
   {
     name: 'mail_imap_delete_message',
     description:
-      'Delete a message. Requires explicit confirmation; write operations are disabled by default.',
+      "Delete a message. If account_id is omitted, defaults to 'default'. Requires explicit confirmation; write operations are disabled by default.",
     inputSchema: DeleteMessageInputSchema,
     outputSchema: DeleteMessageResultSchema,
   },

@@ -87,6 +87,8 @@ Account configuration is provided via environment variables:
 This server also loads a local `.env` file (if present) using `dotenv`. Do not commit secrets.
 An example is provided in `.env.sample`.
 
+If you only configure the `default` account, you can omit `account_id` in tool calls; it defaults to `default`.
+
 ```
 MAIL_IMAP_DEFAULT_HOST
 MAIL_IMAP_DEFAULT_PORT=993
