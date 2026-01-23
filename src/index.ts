@@ -17,6 +17,9 @@ import type { ParsedMail } from 'mailparser';
 import { z } from 'zod';
 import type { ZodError } from 'zod';
 import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
+
+dotenv.config();
 import {
   TOOL_DEFINITIONS,
   type ToolName,
@@ -81,6 +84,50 @@ function normalizeEnvSegment(value: string): string {
     .toUpperCase()
     .replaceAll(/[^A-Z0-9]+/g, '_')
     .replaceAll(/^_+|_+$/g, '');
+}
+
+export function validateEnvironment(): string[] {
+  const errors: string[] = [];
+  const requiredKeys: Array<{ accountId: string; prefix: string }> = [];
+  const hostKeyPattern = /^MAIL_IMAP_(.+)_HOST$/;
+
+  for (const key of Object.keys(process.env)) {
+    const match = hostKeyPattern.exec(key);
+    if (!match) {
+      continue;
+    }
+    const accountId = match[1] ?? '';
+    if (!accountId) {
+      continue;
+    }
+    requiredKeys.push({ accountId, prefix: `MAIL_IMAP_${accountId}_` });
+  }
+
+  if (requiredKeys.length === 0) {
+    requiredKeys.push({ accountId: 'DEFAULT', prefix: 'MAIL_IMAP_DEFAULT_' });
+  }
+
+  for (const entry of requiredKeys) {
+    const missing: string[] = [];
+    if (!process.env[`${entry.prefix}HOST`]) {
+      missing.push(`${entry.prefix}HOST`);
+    }
+    if (!process.env[`${entry.prefix}USER`]) {
+      missing.push(`${entry.prefix}USER`);
+    }
+    if (!process.env[`${entry.prefix}PASS`]) {
+      missing.push(`${entry.prefix}PASS`);
+    }
+    if (missing.length > 0) {
+      errors.push(
+        `Account '${entry.accountId.toLowerCase()}' is missing required env vars: ${missing.join(
+          ', ',
+        )}`,
+      );
+    }
+  }
+
+  return errors;
 }
 
 export function scrubSecrets(value: unknown): unknown {
@@ -1358,6 +1405,18 @@ export function createServer(): Server {
 }
 
 export async function main(): Promise<void> {
+  const errors = validateEnvironment();
+  if (errors.length > 0) {
+    console.error('mail-imap-mcp startup failed due to missing configuration:');
+    for (const error of errors) {
+      console.error(`- ${error}`);
+    }
+    console.error(
+      'Set required variables (HOST/USER/PASS) for each account and retry. See README.md for details.',
+    );
+    process.exitCode = 1;
+    return;
+  }
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);

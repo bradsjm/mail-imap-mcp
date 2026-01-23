@@ -84,6 +84,8 @@ Tokens are stored in-memory with a short TTL for stability. If a token expires o
 
 Account configuration is provided via environment variables:
 
+This server also loads a local `.env` file (if present) using `dotenv`. Do not commit secrets.
+
 ```
 MAIL_IMAP_DEFAULT_HOST
 MAIL_IMAP_DEFAULT_PORT=993

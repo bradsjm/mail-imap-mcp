@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   DeleteMessageInputSchema,
@@ -8,7 +8,7 @@ import {
   UpdateMessageFlagsInputSchema,
 } from './contracts.js';
 import { MessageIdSchema } from './message-id.js';
-import { scrubSecrets } from './index.js';
+import { scrubSecrets, validateEnvironment } from './index.js';
 
 describe('scrubSecrets', () => {
   it('redacts secret-ish keys recursively', () => {
@@ -69,5 +69,30 @@ describe('tool contracts', () => {
   it('rejects malformed message_id', () => {
     const result = MessageIdSchema.safeParse('imap:missing');
     expect(result.success).toBe(false);
+  });
+});
+
+describe('validateEnvironment', () => {
+  const originalEnv = process.env;
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('reports missing defaults when no accounts are configured', () => {
+    process.env = {};
+    const errors = validateEnvironment();
+    expect(errors).toEqual([
+      "Account 'default' is missing required env vars: MAIL_IMAP_DEFAULT_HOST, MAIL_IMAP_DEFAULT_USER, MAIL_IMAP_DEFAULT_PASS",
+    ]);
+  });
+
+  it('reports missing fields for discovered accounts only', () => {
+    process.env = {
+      MAIL_IMAP_WORK_HOST: 'imap.example.com',
+      MAIL_IMAP_WORK_USER: 'me@example.com',
+    };
+    const errors = validateEnvironment();
+    expect(errors).toEqual(["Account 'work' is missing required env vars: MAIL_IMAP_WORK_PASS"]);
   });
 });
