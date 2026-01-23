@@ -179,6 +179,11 @@ pnpm build
 Many MCP-enabled chat applications run stdio servers by spawning a process from an executable command.
 These are common ways to invoke this server:
 
+### Option 0: Run via npx (published package)
+
+- `command`: `npx`
+- `args`: `-y @bradsjm/mail-imap-mcp`
+
 ### Option A: Run from this repo (dev, no build)
 
 - `command`: `pnpm`

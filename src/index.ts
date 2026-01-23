@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { ImapFlow } from 'imapflow';
 import type {
   CopyResponseObject,
