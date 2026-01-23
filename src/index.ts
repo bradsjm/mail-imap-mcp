@@ -20,6 +20,7 @@ import { z } from 'zod';
 import type { ZodError } from 'zod';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
+import { PDFParse } from 'pdf-parse';
 
 dotenv.config({ quiet: true });
 import {
@@ -692,15 +693,32 @@ function collectHeaders(
   return output;
 }
 
-function collectAttachmentSummaries(
+async function extractTextFromPdf(buffer: Buffer): Promise<string | null> {
+  try {
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    await parser.destroy();
+    return result.text || null;
+  } catch (error) {
+    console.error('PDF extraction failed:', error);
+    return null;
+  }
+}
+
+async function collectAttachmentSummaries(
   node: MessageStructureObject | undefined,
   summaries: Array<{
     filename?: string;
     content_type: string;
     size_bytes: number;
     part_id: string;
+    extracted_text?: string;
   }>,
-): void {
+  client: ImapFlow | null = null,
+  uid: number = 0,
+  extractPdfText: boolean = false,
+  maxTextChars: number = 10000,
+): Promise<void> {
   if (!node) {
     return;
   }
@@ -714,6 +732,7 @@ function collectAttachmentSummaries(
       content_type: string;
       size_bytes: number;
       part_id: string;
+      extracted_text?: string;
     } = {
       content_type: node.type,
       size_bytes: node.size,
@@ -722,11 +741,46 @@ function collectAttachmentSummaries(
     if (filename) {
       entry.filename = filename;
     }
+
+    // Extract text from PDF attachments if requested
+    if (
+      extractPdfText &&
+      node.type === 'application/pdf' &&
+      client &&
+      uid > 0 &&
+      node.size <= 5_000_000
+    ) {
+      try {
+        const download = await client.download(uid, node.part, {
+          uid: true,
+          maxBytes: 5_000_000,
+        });
+
+        // Buffer the content if it's a Readable stream
+        const pdfBuffer = Buffer.isBuffer(download.content)
+          ? download.content
+          : await (async () => {
+              const chunks: Buffer[] = [];
+              for await (const chunk of download.content) {
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
+              }
+              return Buffer.concat(chunks);
+            })();
+
+        const extractedText = await extractTextFromPdf(pdfBuffer);
+        if (extractedText) {
+          entry.extracted_text = truncateText(extractedText, maxTextChars);
+        }
+      } catch (error) {
+        console.error(`Failed to extract text from PDF ${filename || '(unnamed)'}:`, error);
+      }
+    }
+
     summaries.push(entry);
   }
   if (node.childNodes) {
     for (const child of node.childNodes) {
-      collectAttachmentSummaries(child, summaries);
+      await collectAttachmentSummaries(child, summaries, client, uid, extractPdfText, maxTextChars);
     }
   }
 }
@@ -1327,8 +1381,16 @@ async function handleToolCall(
             content_type: string;
             size_bytes: number;
             part_id: string;
+            extracted_text?: string;
           }> = [];
-          collectAttachmentSummaries(fetched.bodyStructure, attachments);
+          await collectAttachmentSummaries(
+            fetched.bodyStructure,
+            attachments,
+            client,
+            decoded.uid,
+            args.extract_attachment_text,
+            args.attachment_text_max_chars,
+          );
 
           const messageId = encodeMessageId({
             account_id: args.account_id,

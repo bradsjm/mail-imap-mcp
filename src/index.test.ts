@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   DeleteMessageInputSchema,
+  GetMessageInputSchema,
   ListMailboxesInputSchema,
   SearchMessagesInputSchema,
   UpdateMessageFlagsInputSchema,
@@ -106,5 +107,39 @@ describe('validateEnvironment', () => {
     };
     const errors = validateEnvironment();
     expect(errors).toEqual(["Account 'work' is missing required env vars: MAIL_IMAP_WORK_PASS"]);
+  });
+});
+
+describe('PDF extraction validation', () => {
+  it('accepts valid PDF extraction parameters', () => {
+    const result = GetMessageInputSchema.safeParse({
+      account_id: 'default',
+      message_id: 'imap:default:INBOX:1:2',
+      extract_attachment_text: true,
+      attachment_text_max_chars: 5000,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects attachment_text_max_chars without extract_attachment_text', () => {
+    const result = GetMessageInputSchema.safeParse({
+      account_id: 'default',
+      message_id: 'imap:default:INBOX:1:2',
+      extract_attachment_text: false,
+      attachment_text_max_chars: 5000,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('allows default attachment_text_max_chars when extract_attachment_text is true', () => {
+    const result = GetMessageInputSchema.safeParse({
+      account_id: 'default',
+      message_id: 'imap:default:INBOX:1:2',
+      extract_attachment_text: true,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.attachment_text_max_chars).toBe(10000);
+    }
   });
 });

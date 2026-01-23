@@ -146,8 +146,30 @@ export const GetMessageInputSchema = z
       .default(false)
       .describe('If true, include all headers (may be large/noisy). Implies include_headers.'),
     include_html: z.boolean().default(false),
+    extract_attachment_text: z
+      .boolean()
+      .default(false)
+      .describe('If true, extract text from PDF attachments (may be slow).'),
+    attachment_text_max_chars: z
+      .number()
+      .int()
+      .min(100)
+      .max(50000)
+      .default(10000)
+      .describe(
+        'Maximum text length to extract from each PDF attachment when extract_attachment_text is true (100-50000).',
+      ),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.extract_attachment_text !== true && value.attachment_text_max_chars !== 10000) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'attachment_text_max_chars is only valid when extract_attachment_text is true.',
+        path: ['attachment_text_max_chars'],
+      });
+    }
+  });
 
 export const GetMessageRawInputSchema = z
   .object({
@@ -206,6 +228,7 @@ export const AttachmentSummarySchema = z
     content_type: z.string().min(1).max(128),
     size_bytes: z.number().int().nonnegative(),
     part_id: z.string().min(1).max(128),
+    extracted_text: z.string().min(1).max(50000).optional(),
   })
   .strict();
 
@@ -319,7 +342,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   {
     name: 'mail_imap_get_message',
     description:
-      "Fetch a single message by stable identifier and return headers + a bounded text snippet (optionally sanitized HTML). If account_id is omitted, defaults to 'default'.",
+      "Fetch a single message by stable identifier and return headers + a bounded text snippet (optionally sanitized HTML). Can extract text from PDF attachments. If account_id is omitted, defaults to 'default'.",
     inputSchema: GetMessageInputSchema,
     outputSchema: GetMessageResultSchema,
   },

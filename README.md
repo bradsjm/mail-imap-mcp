@@ -21,6 +21,7 @@ Responses are JSON-encoded text and include:
 - Fetch a message body/headers with size limits
 - Fetch raw RFC822 source (size-limited)
 - Attachment metadata discovery (no bytes by default)
+- PDF text extraction from attachments (optional, size-limited)
 
 ### Write (gated)
 
@@ -49,6 +50,22 @@ Inputs include:
 ### `mail_imap_get_message`
 
 Fetch a single message by `message_id` and return headers + bounded text/HTML snippets.
+
+Inputs include:
+
+- `account_id`, `message_id`
+- `body_max_chars` (default 2000, max 20000)
+- `include_headers` (default true), `include_all_headers` (default false), `include_html` (default false)
+- `extract_attachment_text` (default false) - extract text from PDF attachments
+- `attachment_text_max_chars` (default 10000, max 50000) - max text length per PDF when extraction enabled
+
+When `extract_attachment_text` is true, the server will:
+
+- Download PDF attachments up to 5MB
+- Extract text content using PDF parsing library
+- Include extracted text in the `attachments` array with an `extracted_text` field
+- Truncate to `attachment_text_max_chars` characters per attachment
+- Continue on errors (extraction failures won't fail the entire request)
 
 ### `mail_imap_get_message_raw`
 
@@ -242,6 +259,10 @@ pnpm check
 - Raw message retrieval is size-limited.
 - Move uses MOVE if supported; otherwise COPY+DELETE.
 - Audit logs scrub secret-like fields from arguments.
+- PDF text extraction is resource-intensive and may increase response time significantly.
+- PDF extraction only processes attachments up to 5MB in size; larger PDFs are skipped.
+- PDF extraction failures are logged but don't fail the entire message retrieval request.
+- Use `extract_attachment_text` selectively when you actually need PDF content.
 
 ## Development
 
