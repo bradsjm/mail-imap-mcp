@@ -330,6 +330,12 @@ function parseDateOnly(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
+function hasCapability(client: ImapFlow, name: string): boolean {
+  const key = name.toUpperCase();
+  const value = client.capabilities.get(key);
+  return value === true || typeof value === 'number';
+}
+
 function buildSearchQuery(args: z.infer<typeof SearchMessagesInputSchema>): SearchObject {
   const query: SearchObject = {};
 
@@ -964,26 +970,47 @@ export function createServer(): Server {
               );
             }
 
-            const moveResult: CopyResponseObject | false = await client.messageMove(
-              decoded.uid,
-              args.destination_mailbox,
-              { uid: true },
-            );
+            const supportsMove = hasCapability(client, 'MOVE');
+            const supportsUidplus = hasCapability(client, 'UIDPLUS');
+            let moveResult: CopyResponseObject | false;
+
+            if (supportsMove) {
+              moveResult = await client.messageMove(decoded.uid, args.destination_mailbox, {
+                uid: true,
+              });
+            } else {
+              moveResult = await client.messageCopy(decoded.uid, args.destination_mailbox, {
+                uid: true,
+              });
+              if (moveResult) {
+                const deleted = await client.messageDelete(decoded.uid, { uid: true });
+                if (!deleted) {
+                  return makeError('Move fallback failed: copy succeeded but delete failed.', [], {
+                    move_strategy: 'copy+delete',
+                    copy_completed: true,
+                  });
+                }
+              }
+            }
 
             if (!moveResult) {
-              return makeError('Move failed for this message.');
+              return makeError('Move failed for this message.', [], {
+                move_strategy: supportsMove ? 'move' : 'copy+delete',
+              });
             }
 
             let newMessageId: string | undefined;
-            const newUid = moveResult.uidMap?.get(decoded.uid);
-            const newUidvalidity = moveResult.uidValidity ?? undefined;
-            if (newUid !== undefined && newUidvalidity !== undefined) {
-              newMessageId = encodeMessageId({
-                account_id: args.account_id,
-                mailbox: args.destination_mailbox,
-                uidvalidity: Number(newUidvalidity),
-                uid: newUid,
-              });
+            if (supportsUidplus) {
+              const newUid = moveResult.uidMap?.get(decoded.uid);
+              const newUidvalidity = moveResult.uidValidity ?? undefined;
+              if (newUid !== undefined && newUidvalidity !== undefined) {
+                newMessageId = encodeMessageId({
+                  account_id: args.account_id,
+                  mailbox: args.destination_mailbox,
+                  uidvalidity: Number(newUidvalidity),
+                  uid: newUid,
+                });
+              }
             }
 
             const summary = `Moved message ${args.message_id} to ${args.destination_mailbox}.`;
@@ -1009,6 +1036,10 @@ export function createServer(): Server {
                 new_message_id: newMessageId,
               },
               hints,
+              {
+                move_strategy: supportsMove ? 'move' : 'copy+delete',
+                uidplus: supportsUidplus,
+              },
             );
           } finally {
             lock.release();
