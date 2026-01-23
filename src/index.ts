@@ -37,6 +37,20 @@ type AccountConfig = Readonly<{
   pass: string;
 }>;
 
+type ToolHint = Readonly<{
+  tool: ToolName;
+  arguments: Record<string, unknown>;
+  reason: string;
+}>;
+
+type ToolJsonResponse = Readonly<{
+  summary: string;
+  data?: unknown;
+  error?: { message: string };
+  hints: ToolHint[];
+  _meta?: Record<string, unknown>;
+}>;
+
 function parseBooleanEnv(value: string | undefined, defaultValue: boolean): boolean {
   if (value === undefined) {
     return defaultValue;
@@ -124,12 +138,61 @@ async function withImapClient<T>(
   }
 }
 
-function makeError(text: string): { isError: true; content: [{ type: 'text'; text: string }] } {
-  return { isError: true, content: [{ type: 'text', text }] };
+function makeError(
+  message: string,
+  hints: ToolHint[] = [],
+  meta?: Record<string, unknown>,
+): { isError: true; content: [{ type: 'json'; json: ToolJsonResponse }] } {
+  const response: ToolJsonResponse = meta
+    ? {
+        summary: message,
+        error: { message },
+        hints,
+        _meta: meta,
+      }
+    : {
+        summary: message,
+        error: { message },
+        hints,
+      };
+  return {
+    isError: true,
+    content: [
+      {
+        type: 'json',
+        json: response,
+      },
+    ],
+  };
 }
 
-function makeOk(text: string): { isError: false; content: [{ type: 'text'; text: string }] } {
-  return { isError: false, content: [{ type: 'text', text }] };
+function makeOk(
+  summary: string,
+  data: unknown,
+  hints: ToolHint[] = [],
+  meta?: Record<string, unknown>,
+): { isError: false; content: [{ type: 'json'; json: ToolJsonResponse }] } {
+  const response: ToolJsonResponse = meta
+    ? {
+        summary,
+        data,
+        hints,
+        _meta: meta,
+      }
+    : {
+        summary,
+        data,
+        hints,
+      };
+  return {
+    isError: false,
+    content: [
+      {
+        type: 'json',
+        json: response,
+      },
+    ],
+  };
 }
 
 const WRITE_ENABLED = parseBooleanEnv(process.env['MAIL_IMAP_WRITE_ENABLED'], false);
@@ -276,18 +339,6 @@ function summarizeEnvelope(envelope: MessageEnvelopeObject | undefined): {
   };
 }
 
-function formatSummaryLine(summary: {
-  uid: number;
-  message_id: string;
-  date: string;
-  from: string | undefined;
-  subject: string | undefined;
-}): string {
-  const fromPart = summary.from ? `from ${summary.from}` : 'from (unknown sender)';
-  const subjectPart = summary.subject ? `subject "${summary.subject}"` : 'no subject';
-  return `- ${summary.message_id} · UID ${summary.uid} · ${summary.date} · ${fromPart} · ${subjectPart}`;
-}
-
 export function createServer(): Server {
   const server = new Server(
     { name: 'mail-imap-mcp', version: '0.1.0' },
@@ -348,16 +399,35 @@ export function createServer(): Server {
         }
 
         const mailboxes = await withImapClient(account, (client) => client.list());
-        const paths = mailboxes
-          .map((m) => m.path)
-          .filter((p): p is string => typeof p === 'string');
-        const preview = paths
-          .slice(0, 30)
-          .map((p) => `- ${p}`)
-          .join('\n');
-        const suffix = paths.length > 30 ? `\n… and ${paths.length - 30} more` : '';
+        const mailboxSummaries = mailboxes
+          .map((mailbox) => ({
+            name: mailbox.path,
+            delimiter: mailbox.delimiter ?? null,
+          }))
+          .filter((mailbox) => typeof mailbox.name === 'string');
+        const summaryText = `Mailboxes (${mailboxSummaries.length}) fetched.`;
+        const hints: ToolHint[] = [];
+        const firstMailbox = mailboxSummaries[0]?.name;
+        if (firstMailbox) {
+          hints.push({
+            tool: 'mail_imap_search_messages',
+            arguments: {
+              account_id: args.account_id,
+              mailbox: firstMailbox,
+              limit: 10,
+            },
+            reason: 'Search the first mailbox to list recent messages.',
+          });
+        }
 
-        return makeOk(`Mailboxes (${paths.length}):\n${preview}${suffix}`);
+        return makeOk(
+          summaryText,
+          {
+            account_id: args.account_id,
+            mailboxes: mailboxSummaries,
+          },
+          hints,
+        );
       }
 
       if (toolName === 'mail_imap_search_messages') {
@@ -436,7 +506,12 @@ export function createServer(): Server {
                 return makeError('Search failed for this mailbox.');
               }
               if (results.length === 0) {
-                return makeOk(`Found 0 messages in ${args.mailbox}.`);
+                return makeOk(`Found 0 messages in ${args.mailbox}.`, {
+                  account_id: args.account_id,
+                  mailbox: args.mailbox,
+                  total: 0,
+                  messages: [],
+                });
               }
               uids = results.slice().sort((a, b) => b - a);
               total = uids.length;
@@ -447,7 +522,12 @@ export function createServer(): Server {
               if (args.page_token) {
                 SEARCH_CURSOR_STORE.delete(args.page_token);
               }
-              return makeOk('No more results. Run the search again to refresh.');
+              return makeOk('No more results. Run the search again to refresh.', {
+                account_id: args.account_id,
+                mailbox: args.mailbox,
+                total,
+                messages: [],
+              });
             }
 
             const pageUids = uids.slice(offset, offset + args.limit);
@@ -485,10 +565,13 @@ export function createServer(): Server {
                 });
                 return {
                   message_id: messageId,
+                  mailbox: args.mailbox,
+                  uidvalidity,
                   uid,
                   date: envelopeSummary.date,
                   from: envelopeSummary.from,
                   subject: envelopeSummary.subject,
+                  flags: message.flags ?? undefined,
                 };
               })
               .filter((summary): summary is NonNullable<typeof summary> => summary !== null);
@@ -516,10 +599,42 @@ export function createServer(): Server {
             }
 
             const header = `Found ${total} messages in ${args.mailbox}. Showing ${summaries.length} starting at ${offset + 1}.`;
-            const lines = summaries.map(formatSummaryLine).join('\n');
-            const footer = nextToken ? `Next page token: ${nextToken}` : 'No more pages.';
+            const hints: ToolHint[] = [];
+            const firstMessage = summaries[0];
+            if (firstMessage) {
+              hints.push({
+                tool: 'mail_imap_get_message',
+                arguments: {
+                  account_id: args.account_id,
+                  message_id: firstMessage.message_id,
+                },
+                reason: 'Fetch full details for the first message in this page.',
+              });
+            }
+            if (nextToken) {
+              hints.push({
+                tool: 'mail_imap_search_messages',
+                arguments: {
+                  account_id: args.account_id,
+                  mailbox: args.mailbox,
+                  page_token: nextToken,
+                },
+                reason: 'Retrieve the next page of results.',
+              });
+            }
 
-            return makeOk([header, lines, footer].filter((line) => line.length > 0).join('\n'));
+            return makeOk(
+              header,
+              {
+                account_id: args.account_id,
+                mailbox: args.mailbox,
+                total,
+                messages: summaries,
+                next_page_token: nextToken,
+              },
+              hints,
+              nextToken ? { next_page_token: nextToken } : undefined,
+            );
           } finally {
             lock.release();
           }
@@ -617,24 +732,43 @@ export function createServer(): Server {
               `Message ${messageId}`,
               `Date: ${envelopeSummary.date}`,
               envelopeSummary.from ? `From: ${envelopeSummary.from}` : 'From: (unknown sender)',
-              envelopeSummary.to ? `To: ${envelopeSummary.to}` : 'To: (unknown recipient)',
-              envelopeSummary.cc ? `Cc: ${envelopeSummary.cc}` : 'Cc: (none)',
               envelopeSummary.subject ? `Subject: ${envelopeSummary.subject}` : 'Subject: (none)',
-              headers ? 'Headers:' : '',
-              headers
-                ? Object.entries(headers)
-                    .map(([key, value]) => `${key}: ${value}`)
-                    .join('\n')
-                : '',
-              bodyText ? 'Body (text, truncated):' : 'Body (text): (none)',
-              bodyText ?? '',
-              args.include_html && limitedHtml ? 'Body (html, sanitized):' : '',
-              args.include_html && limitedHtml ? limitedHtml : '',
-            ]
-              .filter((line) => line.length > 0)
-              .join('\n');
+              bodyText ? `Body snippet: ${truncateText(bodyText, 240)}` : 'Body snippet: (none)',
+            ].join('\n');
 
-            return makeOk(summaryText);
+            const hints: ToolHint[] = [];
+            hints.push({
+              tool: 'mail_imap_search_messages',
+              arguments: {
+                account_id: args.account_id,
+                mailbox: decoded.mailbox,
+                limit: 10,
+              },
+              reason: 'Return to the mailbox list of messages.',
+            });
+
+            return makeOk(
+              summaryText,
+              {
+                account_id: args.account_id,
+                message: {
+                  message_id: messageId,
+                  mailbox: decoded.mailbox,
+                  uidvalidity,
+                  uid: decoded.uid,
+                  date: envelopeSummary.date,
+                  from: envelopeSummary.from,
+                  to: envelopeSummary.to,
+                  cc: envelopeSummary.cc,
+                  subject: envelopeSummary.subject,
+                  headers,
+                  body_text: bodyText,
+                  body_html: args.include_html ? limitedHtml : undefined,
+                  attachments: [],
+                },
+              },
+              hints,
+            );
           } finally {
             lock.release();
           }
