@@ -260,11 +260,12 @@ function isTransientImapError(error: unknown): boolean {
     return false;
   }
   const record = error as Record<string, unknown>;
-  const code = typeof record.code === 'string' ? record.code : undefined;
+  const code = typeof record['code'] === 'string' ? record['code'] : undefined;
   if (code && ['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'ECONNRESET', 'EAI_AGAIN'].includes(code)) {
     return true;
   }
-  const message = typeof record.message === 'string' ? record.message.toLowerCase() : undefined;
+  const message =
+    typeof record['message'] === 'string' ? record['message'].toLowerCase() : undefined;
   if (
     message &&
     (message.includes('timeout') || message.includes('socket') || message.includes('reset'))
@@ -279,11 +280,12 @@ function mapImapError(error: unknown): { message: string; meta?: Record<string, 
     return { message: 'Unknown IMAP error.' };
   }
   const record = error as Record<string, unknown>;
-  const code = typeof record.code === 'string' ? record.code : undefined;
+  const code = typeof record['code'] === 'string' ? record['code'] : undefined;
   const responseStatus =
-    typeof record.responseStatus === 'string' ? record.responseStatus : undefined;
-  const responseText = typeof record.responseText === 'string' ? record.responseText : undefined;
-  const message = typeof record.message === 'string' ? record.message : undefined;
+    typeof record['responseStatus'] === 'string' ? record['responseStatus'] : undefined;
+  const responseText =
+    typeof record['responseText'] === 'string' ? record['responseText'] : undefined;
+  const message = typeof record['message'] === 'string' ? record['message'] : undefined;
   const lower = `${responseText ?? ''} ${message ?? ''}`.toLowerCase();
 
   if (lower.includes('authentication') || lower.includes('auth failed')) {
