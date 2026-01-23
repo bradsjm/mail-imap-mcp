@@ -5,7 +5,7 @@ TypeScript MCP (stdio) server for IMAP email access with a compact, LLM-optimize
 ## Overview
 
 This server exposes outcome-oriented tools to search, read, and safely modify mailboxes over IMAP.
-Responses are JSON-only and include:
+Responses are JSON-encoded text and include:
 
 - `summary`: concise human-readable summary
 - `data`: structured payload aligned to the tool contract
@@ -121,9 +121,10 @@ MAIL_IMAP_GREETING_TIMEOUT_MS=15000
 MAIL_IMAP_SOCKET_TIMEOUT_MS=300000
 ```
 
-## Response shape (JSON-only)
+## Response shape (JSON text)
 
-Each tool returns JSON as the only content item:
+Many MCP clients expect `content` items to be `type: "text"` (and do not accept a JSON content type).
+This server returns a single `text` content item whose text is a JSON object:
 
 ```
 {

@@ -57,6 +57,11 @@ type ToolJsonResponse = Readonly<{
   _meta?: Record<string, unknown>;
 }>;
 
+function encodeToolResponseText(value: ToolJsonResponse): string {
+  // Many MCP clients only accept text/image/audio/resource content types. Emit JSON as text.
+  return JSON.stringify(value, null, 2);
+}
+
 function parseBooleanEnv(value: string | undefined, defaultValue: boolean): boolean {
   if (value === undefined) {
     return defaultValue;
@@ -209,7 +214,7 @@ function makeError(
   message: string,
   hints: ToolHint[] = [],
   meta?: Record<string, unknown>,
-): { isError: true; content: [{ type: 'json'; json: ToolJsonResponse }] } {
+): { isError: true; content: [{ type: 'text'; text: string }] } {
   const response: ToolJsonResponse = meta
     ? {
         summary: message,
@@ -226,8 +231,8 @@ function makeError(
     isError: true,
     content: [
       {
-        type: 'json',
-        json: response,
+        type: 'text',
+        text: encodeToolResponseText(response),
       },
     ],
   };
@@ -238,7 +243,7 @@ function makeOk(
   data: unknown,
   hints: ToolHint[] = [],
   meta?: Record<string, unknown>,
-): { isError: false; content: [{ type: 'json'; json: ToolJsonResponse }] } {
+): { isError: false; content: [{ type: 'text'; text: string }] } {
   const response: ToolJsonResponse = meta
     ? {
         summary,
@@ -255,8 +260,8 @@ function makeOk(
     isError: false,
     content: [
       {
-        type: 'json',
-        json: response,
+        type: 'text',
+        text: encodeToolResponseText(response),
       },
     ],
   };
