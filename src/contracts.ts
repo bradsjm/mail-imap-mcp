@@ -25,9 +25,33 @@ const DefaultAccountIdSchema = AccountIdSchema.default('default').describe(
 
 const MailboxSchema = z.string().min(1).max(256).describe('Mailbox name (e.g., INBOX).');
 
+function isValidDateOnly(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return false;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return false;
+  }
+  if (month < 1 || month > 12) {
+    return false;
+  }
+  if (day < 1) {
+    return false;
+  }
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return day <= daysInMonth;
+}
+
 const DateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => isValidDateOnly(value), {
+    message: 'Invalid date. Use a real YYYY-MM-DD calendar date.',
+  })
   .describe('Date in YYYY-MM-DD format.');
 
 const LimitSchema = z
@@ -70,6 +94,19 @@ export const SearchMessagesInputSchema = z
     unread_only: z.boolean().optional(),
     start_date: DateSchema.optional(),
     end_date: DateSchema.optional(),
+    include_snippet: z
+      .boolean()
+      .default(false)
+      .describe(
+        'If true, include a short body snippet in each message summary (may require extra IO).',
+      ),
+    snippet_max_chars: z
+      .number()
+      .int()
+      .min(50)
+      .max(500)
+      .default(200)
+      .describe('Maximum snippet length when include_snippet is true (50-500).'),
     limit: LimitSchema,
     page_token: PageTokenSchema.optional(),
   })
@@ -82,6 +119,20 @@ export const SearchMessagesInputSchema = z
         path: ['last_days'],
       });
     }
+    if (value.start_date && value.end_date && value.start_date > value.end_date) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'start_date must be on or before end_date.',
+        path: ['start_date'],
+      });
+    }
+    if (value.include_snippet !== true && value.snippet_max_chars !== 200) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'snippet_max_chars is only valid when include_snippet is true.',
+        path: ['snippet_max_chars'],
+      });
+    }
   });
 
 export const GetMessageInputSchema = z
@@ -90,6 +141,10 @@ export const GetMessageInputSchema = z
     message_id: MessageIdSchema,
     body_max_chars: z.number().int().min(100).max(20000).default(2000),
     include_headers: z.boolean().default(true),
+    include_all_headers: z
+      .boolean()
+      .default(false)
+      .describe('If true, include all headers (may be large/noisy). Implies include_headers.'),
     include_html: z.boolean().default(false),
   })
   .strict();
@@ -179,6 +234,7 @@ export const MessageDetailSchema = z
     to: z.string().min(1).max(256).optional(),
     cc: z.string().min(1).max(256).optional(),
     subject: z.string().min(1).max(256).optional(),
+    flags: z.array(FlagSchema).max(20).optional(),
     headers: z.record(z.string(), z.string()).optional(),
     body_text: z.string().min(1).max(20000).optional(),
     body_html: z.string().min(1).max(20000).optional(),

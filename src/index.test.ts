@@ -51,6 +51,16 @@ describe('tool contracts', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects snippet_max_chars without include_snippet', () => {
+    const result = SearchMessagesInputSchema.safeParse({
+      mailbox: 'INBOX',
+      include_snippet: false,
+      snippet_max_chars: 250,
+      limit: 10,
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('requires delete confirmation', () => {
     const result = DeleteMessageInputSchema.safeParse({
       account_id: 'default',
