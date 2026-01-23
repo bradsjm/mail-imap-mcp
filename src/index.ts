@@ -1,7 +1,17 @@
 import { ImapFlow } from 'imapflow';
+import type {
+  FetchMessageObject,
+  MessageAddressObject,
+  MessageEnvelopeObject,
+  SearchObject,
+} from 'imapflow';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { htmlToText } from 'html-to-text';
+import sanitizeHtml from 'sanitize-html';
+import { simpleParser } from 'mailparser';
+import type { ParsedMail } from 'mailparser';
 import { z } from 'zod';
 import type { ZodError } from 'zod';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +26,8 @@ import {
   SearchMessagesInputSchema,
   UpdateMessageFlagsInputSchema,
 } from './contracts.js';
+import { decodeMessageId, encodeMessageId } from './message-id.js';
+import { CursorStore } from './pagination.js';
 
 type AccountConfig = Readonly<{
   host: string;
@@ -121,6 +133,7 @@ function makeOk(text: string): { isError: false; content: [{ type: 'text'; text:
 }
 
 const WRITE_ENABLED = parseBooleanEnv(process.env['MAIL_IMAP_WRITE_ENABLED'], false);
+const SEARCH_CURSOR_STORE = new CursorStore({ ttl_ms: 10 * 60 * 1000, max_entries: 200 });
 
 const TOOL_INPUT_SCHEMAS: Readonly<Record<ToolName, z.ZodTypeAny>> = {
   mail_imap_list_mailboxes: ListMailboxesInputSchema,
@@ -145,6 +158,134 @@ function formatZodError(error: ZodError): string {
       return `${path}: ${issue.message}`;
     })
     .join('\n');
+}
+
+const parseMailSource = simpleParser as unknown as (
+  source: NodeJS.ReadableStream | Buffer,
+) => Promise<ParsedMail>;
+
+function truncateText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  return `${value.slice(0, maxChars).trim()}…`;
+}
+
+function formatHeaderValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map(formatHeaderValue)
+      .filter((item) => item.length > 0)
+      .join(', ');
+  }
+  if (value && typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '[object]';
+    }
+  }
+  return '';
+}
+
+function formatAddress(address: MessageAddressObject): string {
+  if (address.name && address.address) {
+    return `${address.name} <${address.address}>`;
+  }
+  if (address.address) {
+    return address.address;
+  }
+  return address.name ?? '';
+}
+
+function formatAddressList(addresses: MessageAddressObject[] | undefined): string | undefined {
+  if (!addresses || addresses.length === 0) {
+    return undefined;
+  }
+  const formatted = addresses.map(formatAddress).filter((value) => value.length > 0);
+  return formatted.length > 0 ? formatted.join(', ') : undefined;
+}
+
+function toIsoString(value: Date | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return value.toISOString();
+}
+
+function parseDateOnly(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function buildSearchQuery(args: z.infer<typeof SearchMessagesInputSchema>): SearchObject {
+  const query: SearchObject = {};
+
+  if (args.query) {
+    query.text = args.query;
+  }
+  if (args.from) {
+    query.from = args.from;
+  }
+  if (args.to) {
+    query.to = args.to;
+  }
+  if (args.subject) {
+    query.subject = args.subject;
+  }
+  if (args.unread_only === true) {
+    query.seen = false;
+  }
+  if (args.start_date) {
+    query.since = parseDateOnly(args.start_date);
+  }
+  if (args.end_date) {
+    const end = parseDateOnly(args.end_date);
+    end.setUTCDate(end.getUTCDate() + 1);
+    query.before = end;
+  }
+
+  if (Object.keys(query).length === 0) {
+    query.all = true;
+  }
+
+  return query;
+}
+
+function summarizeEnvelope(envelope: MessageEnvelopeObject | undefined): {
+  date: string;
+  from: string | undefined;
+  to: string | undefined;
+  cc: string | undefined;
+  subject: string | undefined;
+} {
+  return {
+    date: toIsoString(envelope?.date) ?? 'unknown date',
+    from: formatAddressList(envelope?.from),
+    to: formatAddressList(envelope?.to),
+    cc: formatAddressList(envelope?.cc),
+    subject: envelope?.subject ?? undefined,
+  };
+}
+
+function formatSummaryLine(summary: {
+  uid: number;
+  message_id: string;
+  date: string;
+  from: string | undefined;
+  subject: string | undefined;
+}): string {
+  const fromPart = summary.from ? `from ${summary.from}` : 'from (unknown sender)';
+  const subjectPart = summary.subject ? `subject "${summary.subject}"` : 'no subject';
+  return `- ${summary.message_id} · UID ${summary.uid} · ${summary.date} · ${fromPart} · ${subjectPart}`;
 }
 
 export function createServer(): Server {
@@ -217,6 +358,287 @@ export function createServer(): Server {
         const suffix = paths.length > 30 ? `\n… and ${paths.length - 30} more` : '';
 
         return makeOk(`Mailboxes (${paths.length}):\n${preview}${suffix}`);
+      }
+
+      if (toolName === 'mail_imap_search_messages') {
+        const args = SearchMessagesInputSchema.parse(rawArgs);
+        if (
+          args.page_token &&
+          (args.query ||
+            args.from ||
+            args.to ||
+            args.subject ||
+            args.unread_only !== undefined ||
+            args.start_date ||
+            args.end_date)
+        ) {
+          return makeError('Do not combine page_token with additional search filters.');
+        }
+
+        const account = loadAccountConfig(args.account_id);
+        if (!account) {
+          const prefix = `MAIL_IMAP_${normalizeEnvSegment(args.account_id)}_`;
+          return makeError(
+            [
+              `Account '${args.account_id}' is not configured.`,
+              `Set env vars:`,
+              `- ${prefix}HOST`,
+              `- ${prefix}USER`,
+              `- ${prefix}PASS`,
+              `Optional: ${prefix}PORT (default 993), ${prefix}SECURE (default true)`,
+            ].join('\n'),
+          );
+        }
+
+        return await withImapClient(account, async (client) => {
+          const lock = await client.getMailboxLock(args.mailbox, {
+            readOnly: true,
+            description: 'mail_imap_search_messages',
+          });
+          try {
+            const mailboxInfo = client.mailbox;
+            if (!mailboxInfo) {
+              return makeError('Mailbox could not be opened.');
+            }
+            const mailboxUidvalidity = Number(mailboxInfo.uidValidity ?? 0n);
+
+            const cursor = args.page_token
+              ? SEARCH_CURSOR_STORE.getSearchCursor(args.page_token)
+              : null;
+            if (args.page_token && !cursor) {
+              return makeError('page_token is invalid or expired. Run the search again.');
+            }
+            if (
+              cursor &&
+              (cursor.account_id !== args.account_id || cursor.mailbox !== args.mailbox)
+            ) {
+              return makeError('page_token does not match the requested mailbox or account.');
+            }
+            if (cursor && cursor.uidvalidity !== mailboxUidvalidity) {
+              SEARCH_CURSOR_STORE.delete(cursor.id);
+              return makeError('Mailbox snapshot has changed. Run the search again to refresh.');
+            }
+
+            let uids: number[] = [];
+            let total = 0;
+            let offset = 0;
+            let uidvalidity = mailboxUidvalidity;
+
+            if (cursor) {
+              uids = cursor.uids;
+              total = cursor.total;
+              offset = cursor.offset;
+              uidvalidity = cursor.uidvalidity;
+            } else {
+              const searchQuery = buildSearchQuery(args);
+              const results = await client.search(searchQuery, { uid: true });
+              if (results === false) {
+                return makeError('Search failed for this mailbox.');
+              }
+              if (results.length === 0) {
+                return makeOk(`Found 0 messages in ${args.mailbox}.`);
+              }
+              uids = results.slice().sort((a, b) => b - a);
+              total = uids.length;
+              offset = 0;
+            }
+
+            if (offset >= total) {
+              if (args.page_token) {
+                SEARCH_CURSOR_STORE.delete(args.page_token);
+              }
+              return makeOk('No more results. Run the search again to refresh.');
+            }
+
+            const pageUids = uids.slice(offset, offset + args.limit);
+            const fetchResults: FetchMessageObject[] = [];
+            for await (const message of client.fetch(
+              pageUids,
+              { uid: true, envelope: true, flags: true, internalDate: true },
+              { uid: true },
+            )) {
+              fetchResults.push(message);
+            }
+
+            const order = new Map<number, number>();
+            pageUids.forEach((uid, index) => {
+              order.set(uid, index);
+            });
+            fetchResults.sort((a, b) => {
+              const aIndex = order.get(a.uid ?? 0) ?? 0;
+              const bIndex = order.get(b.uid ?? 0) ?? 0;
+              return aIndex - bIndex;
+            });
+
+            const summaries = fetchResults
+              .map((message) => {
+                if (message.uid === undefined) {
+                  return null;
+                }
+                const envelopeSummary = summarizeEnvelope(message.envelope);
+                const uid = message.uid;
+                const messageId = encodeMessageId({
+                  account_id: args.account_id,
+                  mailbox: args.mailbox,
+                  uidvalidity,
+                  uid,
+                });
+                return {
+                  message_id: messageId,
+                  uid,
+                  date: envelopeSummary.date,
+                  from: envelopeSummary.from,
+                  subject: envelopeSummary.subject,
+                };
+              })
+              .filter((summary): summary is NonNullable<typeof summary> => summary !== null);
+
+            const nextOffset = offset + pageUids.length;
+            let nextToken: string | undefined;
+            if (nextOffset < total) {
+              if (args.page_token) {
+                const updated = SEARCH_CURSOR_STORE.updateSearchCursor(args.page_token, nextOffset);
+                nextToken = updated?.id ?? args.page_token;
+              } else {
+                const created = SEARCH_CURSOR_STORE.createSearchCursor({
+                  tool: 'mail_imap_search_messages',
+                  account_id: args.account_id,
+                  mailbox: args.mailbox,
+                  uidvalidity,
+                  uids,
+                  offset: nextOffset,
+                  total,
+                });
+                nextToken = created.id;
+              }
+            } else if (args.page_token) {
+              SEARCH_CURSOR_STORE.delete(args.page_token);
+            }
+
+            const header = `Found ${total} messages in ${args.mailbox}. Showing ${summaries.length} starting at ${offset + 1}.`;
+            const lines = summaries.map(formatSummaryLine).join('\n');
+            const footer = nextToken ? `Next page token: ${nextToken}` : 'No more pages.';
+
+            return makeOk([header, lines, footer].filter((line) => line.length > 0).join('\n'));
+          } finally {
+            lock.release();
+          }
+        });
+      }
+
+      if (toolName === 'mail_imap_get_message') {
+        const args = GetMessageInputSchema.parse(rawArgs);
+        const decoded = decodeMessageId(args.message_id);
+        if (!decoded) {
+          return makeError(
+            "Invalid message_id. Expected 'imap:{account_id}:{mailbox}:{uidvalidity}:{uid}'.",
+          );
+        }
+        if (decoded.account_id !== args.account_id) {
+          return makeError('message_id does not match the requested account_id.');
+        }
+
+        const account = loadAccountConfig(args.account_id);
+        if (!account) {
+          const prefix = `MAIL_IMAP_${normalizeEnvSegment(args.account_id)}_`;
+          return makeError(
+            [
+              `Account '${args.account_id}' is not configured.`,
+              `Set env vars:`,
+              `- ${prefix}HOST`,
+              `- ${prefix}USER`,
+              `- ${prefix}PASS`,
+              `Optional: ${prefix}PORT (default 993), ${prefix}SECURE (default true)`,
+            ].join('\n'),
+          );
+        }
+
+        return await withImapClient(account, async (client) => {
+          const lock = await client.getMailboxLock(decoded.mailbox, {
+            readOnly: true,
+            description: 'mail_imap_get_message',
+          });
+          try {
+            const mailboxInfo = client.mailbox;
+            if (!mailboxInfo) {
+              return makeError('Mailbox could not be opened.');
+            }
+            const uidvalidity = Number(mailboxInfo.uidValidity ?? 0n);
+            if (uidvalidity !== decoded.uidvalidity) {
+              return makeError(
+                `message_id uidvalidity mismatch (expected ${decoded.uidvalidity}, mailbox ${uidvalidity}).`,
+              );
+            }
+
+            const fetched = await client.fetchOne(
+              decoded.uid,
+              { uid: true, envelope: true, flags: true, internalDate: true },
+              { uid: true },
+            );
+            if (!fetched) {
+              return makeError('Message not found.');
+            }
+
+            const maxBytes = Math.min(args.body_max_chars * 4, 500_000);
+            const download = await client.download(decoded.uid, undefined, {
+              uid: true,
+              maxBytes,
+            });
+            const parsed = await parseMailSource(download.content);
+
+            const envelopeSummary = summarizeEnvelope(fetched.envelope);
+            const parsedHtml = typeof parsed.html === 'string' ? parsed.html : undefined;
+            const bodyHtml = parsedHtml ? sanitizeHtml(parsedHtml) : undefined;
+            const textFromHtml = bodyHtml ? htmlToText(bodyHtml, { wordwrap: false }) : undefined;
+            const rawText = parsed.text ?? textFromHtml ?? '';
+
+            const bodyText = rawText ? truncateText(rawText, args.body_max_chars) : undefined;
+            const limitedHtml =
+              args.include_html && bodyHtml
+                ? truncateText(bodyHtml, args.body_max_chars)
+                : undefined;
+
+            let headers: Record<string, string> | undefined;
+            if (args.include_headers) {
+              headers = {};
+              for (const [key, value] of parsed.headers) {
+                headers[key] = formatHeaderValue(value);
+              }
+            }
+
+            const messageId = encodeMessageId({
+              account_id: args.account_id,
+              mailbox: decoded.mailbox,
+              uidvalidity,
+              uid: decoded.uid,
+            });
+
+            const summaryText = [
+              `Message ${messageId}`,
+              `Date: ${envelopeSummary.date}`,
+              envelopeSummary.from ? `From: ${envelopeSummary.from}` : 'From: (unknown sender)',
+              envelopeSummary.to ? `To: ${envelopeSummary.to}` : 'To: (unknown recipient)',
+              envelopeSummary.cc ? `Cc: ${envelopeSummary.cc}` : 'Cc: (none)',
+              envelopeSummary.subject ? `Subject: ${envelopeSummary.subject}` : 'Subject: (none)',
+              headers ? 'Headers:' : '',
+              headers
+                ? Object.entries(headers)
+                    .map(([key, value]) => `${key}: ${value}`)
+                    .join('\n')
+                : '',
+              bodyText ? 'Body (text, truncated):' : 'Body (text): (none)',
+              bodyText ?? '',
+              args.include_html && limitedHtml ? 'Body (html, sanitized):' : '',
+              args.include_html && limitedHtml ? limitedHtml : '',
+            ]
+              .filter((line) => line.length > 0)
+              .join('\n');
+
+            return makeOk(summaryText);
+          } finally {
+            lock.release();
+          }
+        });
       }
 
       return makeError(`Tool '${toolName}' is registered but not implemented yet.`);
