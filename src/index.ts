@@ -782,7 +782,7 @@ async function handleToolCall(
       const mailboxSummaries = mailboxes
         .map((mailbox) => ({
           name: mailbox.path,
-          delimiter: mailbox.delimiter ?? null,
+          delimiter: mailbox.delimiter != '/' ? mailbox.delimiter : undefined,
         }))
         .filter((mailbox) => typeof mailbox.name === 'string');
       const summaryText = `Mailboxes (${mailboxSummaries.length}) fetched.`;
@@ -890,10 +890,11 @@ async function handleToolCall(
           } else {
             const searchQuery = buildSearchQuery(args);
             const results = await client.search(searchQuery, { uid: true });
-            if (results === false) {
+            if (!results) {
               return makeError('Search failed for this mailbox.');
             }
-            if (results.length === 0) {
+            const searchResults: number[] = results.slice().sort((a, b) => b - a);
+            if (searchResults.length === 0) {
               const meta: Record<string, unknown> = {
                 now_utc: nowUtcIso(),
                 security_note: UNTRUSTED_EMAIL_CONTENT_NOTE,
@@ -915,7 +916,7 @@ async function handleToolCall(
                 meta,
               );
             }
-            uids = results.slice().sort((a, b) => b - a);
+            uids = searchResults;
             total = uids.length;
             offset = 0;
             paginationDisabled = total > MAX_SEARCH_MATCHES_FOR_PAGINATION;
@@ -952,7 +953,7 @@ async function handleToolCall(
             );
           }
 
-          const pageUids = cursor
+          const pageUids: number[] = cursor
             ? sliceUidsFromDescendingRanges(uidRanges, offset, args.limit)
             : uids.slice(offset, offset + args.limit);
           const fetchResults: FetchMessageObject[] = [];
