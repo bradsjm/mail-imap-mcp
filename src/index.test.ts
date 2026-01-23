@@ -1,14 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
 import {
   DeleteMessageInputSchema,
   ListMailboxesInputSchema,
   SearchMessagesInputSchema,
-  TOOL_DEFINITIONS,
   UpdateMessageFlagsInputSchema,
 } from './contracts.js';
 import { MessageIdSchema } from './message-id.js';
-import { scrubSecrets, validateEnvironment } from './index.js';
+import { getListedTools, scrubSecrets, validateEnvironment } from './index.js';
 
 describe('scrubSecrets', () => {
   it('redacts secret-ish keys recursively', () => {
@@ -30,13 +28,7 @@ describe('scrubSecrets', () => {
 
 describe('tool contracts', () => {
   it('exposes stable tool list with input schemas', () => {
-    const tools = TOOL_DEFINITIONS.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: z.toJSONSchema(tool.inputSchema, { target: 'draft-7' }),
-    }));
-
-    expect(tools).toMatchSnapshot();
+    expect(getListedTools()).toMatchSnapshot();
   });
 
   it('validates list mailboxes input', () => {

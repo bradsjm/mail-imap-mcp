@@ -170,6 +170,57 @@ pnpm dev
 pnpm build
 ```
 
+## Chat Application Integration (stdio spawn command)
+
+Many MCP-enabled chat applications run stdio servers by spawning a process from an executable command.
+These are common ways to invoke this server:
+
+### Option A: Run from this repo (dev, no build)
+
+- `command`: `pnpm`
+- `args`: `-C /Users/jonathan/Code/Projects/mail-imap-mcp dev`
+
+### Option B: Run from this repo (built)
+
+1. Build once:
+
+   ```
+   pnpm -C /Users/jonathan/Code/Projects/mail-imap-mcp build
+   ```
+
+2. Spawn:
+
+- `command`: `node`
+- `args`: `/Users/jonathan/Code/Projects/mail-imap-mcp/dist/index.js`
+
+### Option C: Install globally (true executable)
+
+1. Install:
+
+   ```
+   pnpm -g add /Users/jonathan/Code/Projects/mail-imap-mcp
+   ```
+
+2. Spawn:
+
+- `command`: `mail-imap-mcp`
+
+### Example MCP server config
+
+Exact configuration keys vary by chat application, but the shape usually looks like:
+
+```json
+{
+  "command": "node",
+  "args": ["mail-imap-mcp/dist/index.js"],
+  "env": {
+    "MAIL_IMAP_DEFAULT_HOST": "imap.example.com",
+    "MAIL_IMAP_DEFAULT_USER": "me@example.com",
+    "MAIL_IMAP_DEFAULT_PASS": "app-password-or-token"
+  }
+}
+```
+
 ### Quality gates
 
 ```

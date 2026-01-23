@@ -22,6 +22,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import {
   TOOL_DEFINITIONS,
+  type ToolDefinition,
   type ToolName,
   DeleteMessageInputSchema,
   GetMessageInputSchema,
@@ -552,6 +553,25 @@ function summarizeEnvelope(envelope: MessageEnvelopeObject | undefined): {
   };
 }
 
+export function getListedTools(): Array<{
+  name: ToolName;
+  description: string;
+  inputSchema: unknown;
+}> {
+  const available: readonly ToolDefinition[] = TOOL_DEFINITIONS.filter((tool) => {
+    if (WRITE_ENABLED) {
+      return true;
+    }
+    return !WRITE_TOOLS.has(tool.name);
+  });
+
+  return available.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: z.toJSONSchema(tool.inputSchema, { target: 'draft-7' }),
+  }));
+}
+
 export function createServer(): Server {
   const server = new Server(
     { name: 'mail-imap-mcp', version: '0.1.0' },
@@ -563,11 +583,7 @@ export function createServer(): Server {
   );
 
   server.setRequestHandler(ListToolsRequestSchema, () => ({
-    tools: TOOL_DEFINITIONS.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: z.toJSONSchema(tool.inputSchema, { target: 'draft-7' }),
-    })),
+    tools: getListedTools(),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
