@@ -121,7 +121,7 @@ const SANITIZE_HTML_POLICY: SanitizeHtmlOptions = {
 
 function encodeToolResponseText(value: ToolJsonResponse): string {
   // Many MCP clients only accept text/image/audio/resource content types. Emit JSON as text.
-  return JSON.stringify(value, null, 2);
+  return JSON.stringify(value);
 }
 
 function nowUtcIso(): string {
