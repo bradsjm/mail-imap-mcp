@@ -3,22 +3,19 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import type { ZodError } from 'zod';
 import { fileURLToPath } from 'node:url';
-
-type ToolName =
-  | 'mail_imap_list_mailboxes'
-  | 'mail_imap_search_messages'
-  | 'mail_imap_get_message'
-  | 'mail_imap_get_message_raw'
-  | 'mail_imap_update_message_flags'
-  | 'mail_imap_move_message'
-  | 'mail_imap_delete_message';
-
-type ToolDefinition = Readonly<{
-  name: ToolName;
-  description: string;
-  input: z.ZodTypeAny;
-}>;
+import {
+  TOOL_DEFINITIONS,
+  type ToolName,
+  DeleteMessageInputSchema,
+  GetMessageInputSchema,
+  GetMessageRawInputSchema,
+  ListMailboxesInputSchema,
+  MoveMessageInputSchema,
+  SearchMessagesInputSchema,
+  UpdateMessageFlagsInputSchema,
+} from './contracts.js';
 
 type AccountConfig = Readonly<{
   host: string;
@@ -123,57 +120,32 @@ function makeOk(text: string): { isError: false; content: [{ type: 'text'; text:
   return { isError: false, content: [{ type: 'text', text }] };
 }
 
-const ListMailboxesInput = z
-  .object({
-    account_id: z.string().min(1).describe('Configured IMAP account identifier'),
-  })
-  .strict();
+const WRITE_ENABLED = parseBooleanEnv(process.env['MAIL_IMAP_WRITE_ENABLED'], false);
 
-const UnimplementedInput = z.object({}).strict();
+const TOOL_INPUT_SCHEMAS: Readonly<Record<ToolName, z.ZodTypeAny>> = {
+  mail_imap_list_mailboxes: ListMailboxesInputSchema,
+  mail_imap_search_messages: SearchMessagesInputSchema,
+  mail_imap_get_message: GetMessageInputSchema,
+  mail_imap_get_message_raw: GetMessageRawInputSchema,
+  mail_imap_update_message_flags: UpdateMessageFlagsInputSchema,
+  mail_imap_move_message: MoveMessageInputSchema,
+  mail_imap_delete_message: DeleteMessageInputSchema,
+};
 
-const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
-  {
-    name: 'mail_imap_list_mailboxes',
-    description:
-      'List mailboxes for an IMAP account. Use this to discover valid mailbox names (e.g., INBOX). Returns a concise list.',
-    input: ListMailboxesInput,
-  },
-  {
-    name: 'mail_imap_search_messages',
-    description:
-      'Search messages in a mailbox by sender/subject/date/unread. Returns paginated summaries (token-efficient).',
-    input: UnimplementedInput,
-  },
-  {
-    name: 'mail_imap_get_message',
-    description:
-      'Fetch a single message by stable identifier and return headers + a bounded text snippet (optionally sanitized HTML).',
-    input: UnimplementedInput,
-  },
-  {
-    name: 'mail_imap_get_message_raw',
-    description:
-      'Fetch raw message source (RFC822) for a single message. Gated and size-limited; not returned by default.',
-    input: UnimplementedInput,
-  },
-  {
-    name: 'mail_imap_update_message_flags',
-    description:
-      'Update flags on a message (e.g., mark read/unread). Write operations are disabled by default.',
-    input: UnimplementedInput,
-  },
-  {
-    name: 'mail_imap_move_message',
-    description: 'Move a message to another mailbox. Write operations are disabled by default.',
-    input: UnimplementedInput,
-  },
-  {
-    name: 'mail_imap_delete_message',
-    description:
-      'Delete a message. Requires explicit confirmation; write operations are disabled by default.',
-    input: UnimplementedInput,
-  },
-] as const;
+const WRITE_TOOLS = new Set<ToolName>([
+  'mail_imap_update_message_flags',
+  'mail_imap_move_message',
+  'mail_imap_delete_message',
+]);
+
+function formatZodError(error: ZodError): string {
+  return error.issues
+    .map((issue) => {
+      const path = issue.path.length > 0 ? issue.path.join('.') : 'input';
+      return `${path}: ${issue.message}`;
+    })
+    .join('\n');
+}
 
 export function createServer(): Server {
   const server = new Server(
@@ -189,7 +161,7 @@ export function createServer(): Server {
     tools: TOOL_DEFINITIONS.map((tool) => ({
       name: tool.name,
       description: tool.description,
-      inputSchema: z.toJSONSchema(tool.input, { target: 'draft-7' }),
+      inputSchema: z.toJSONSchema(tool.inputSchema, { target: 'draft-7' }),
     })),
   }));
 
@@ -200,8 +172,25 @@ export function createServer(): Server {
     const rawArgs = request.params.arguments;
 
     try {
+      const tool = TOOL_DEFINITIONS.find((definition) => definition.name === toolName);
+      if (!tool) {
+        return makeError(`Unknown tool: '${toolName}'.`);
+      }
+
+      const schema = TOOL_INPUT_SCHEMAS[toolName];
+      const parsedArgs = schema.safeParse(rawArgs);
+      if (!parsedArgs.success) {
+        return makeError(`Invalid input:\n${formatZodError(parsedArgs.error)}`);
+      }
+
+      if (WRITE_TOOLS.has(toolName) && !WRITE_ENABLED) {
+        return makeError(
+          'Write operations are disabled. Set MAIL_IMAP_WRITE_ENABLED=true to enable updates.',
+        );
+      }
+
       if (toolName === 'mail_imap_list_mailboxes') {
-        const args = ListMailboxesInput.parse(rawArgs);
+        const args = ListMailboxesInputSchema.parse(rawArgs);
         const account = loadAccountConfig(args.account_id);
         if (!account) {
           const prefix = `MAIL_IMAP_${normalizeEnvSegment(args.account_id)}_`;
@@ -228,11 +217,6 @@ export function createServer(): Server {
         const suffix = paths.length > 30 ? `\n… and ${paths.length - 30} more` : '';
 
         return makeOk(`Mailboxes (${paths.length}):\n${preview}${suffix}`);
-      }
-
-      const knownTools = new Set(TOOL_DEFINITIONS.map((t) => t.name));
-      if (!knownTools.has(toolName)) {
-        return makeError(`Unknown tool: '${toolName}'.`);
       }
 
       return makeError(`Tool '${toolName}' is registered but not implemented yet.`);
