@@ -51,6 +51,7 @@ async function extractTextFromPdf(buffer: Buffer): Promise<string | null> {
 ```
 
 **Design Decisions:**
+
 - Uses `PDFParse` class for proper resource management
 - Explicitly calls `destroy()` to clean up resources
 - Returns `null` on failure to allow graceful degradation
@@ -115,6 +116,7 @@ async function collectAttachmentSummaries(
 ```
 
 **Key Improvements:**
+
 - Converted synchronous function to async
 - Added optional parameters for PDF extraction control
 - Added `extracted_text` field to attachment output schema
@@ -164,6 +166,7 @@ export const GetMessageInputSchema = z
 ```
 
 **Validation Logic:**
+
 - `extract_attachment_text` defaults to `false` (opt-in)
 - `attachment_text_max_chars` defaults to 10,000 characters
 - Range validation: 100-50,000 characters
@@ -183,6 +186,7 @@ export const AttachmentSummarySchema = z
 ```
 
 **Output Schema:**
+
 - Added optional `extracted_text` field to attachment summary
 - Max length: 50,000 characters
 - Optional field - only present when extraction succeeds
@@ -202,6 +206,7 @@ await collectAttachmentSummaries(
 ```
 
 **Integration Points:**
+
 - Passes IMAP client for downloading attachments
 - Passes message UID for targeted downloads
 - Passes extraction flags from user input
@@ -214,6 +219,7 @@ await collectAttachmentSummaries(
 **Decision**: PDF extraction is disabled by default (`extract_attachment_text: false`)
 
 **Rationale**:
+
 - Performance: PDF extraction is resource-intensive
 - Privacy: Not all users want attachment content processed
 - Compatibility: Maintains backward compatibility
@@ -224,6 +230,7 @@ await collectAttachmentSummaries(
 **Decision**: 5MB PDF limit, 50KB text limit per attachment
 
 **Rationale**:
+
 - 5MB PDF: Prevents memory issues with large attachments
 - 50KB text: Balances utility with response size
 - Limits prevent abuse and resource exhaustion
@@ -234,6 +241,7 @@ await collectAttachmentSummaries(
 **Decision**: Graceful degradation - extraction failures logged but not thrown
 
 **Rationale**:
+
 - Non-blocking: One failed PDF shouldn't fail entire request
 - User experience: Still get message body and other attachments
 - Debugging: Server logs provide context for failures
@@ -244,6 +252,7 @@ await collectAttachmentSummaries(
 **Decision**: Explicitly buffer `download.content` as it may be a Readable stream
 
 **Rationale**:
+
 - `imapflow` may return streams or buffers
 - `pdf-parse` requires Buffer/Uint8Array input
 - Async iteration handles both cases safely
@@ -254,6 +263,7 @@ await collectAttachmentSummaries(
 **Decision**: Explicitly call `parser.destroy()` after extraction
 
 **Rationale**:
+
 - `PDFParse` maintains internal resources
 - Prevents memory leaks in long-running processes
 - Follows library best practices
@@ -263,12 +273,12 @@ await collectAttachmentSummaries(
 
 ### Estimated Resource Usage
 
-| Operation | Memory | CPU | Network | Time |
-|-----------|---------|-----|----------|------|
-| Without extraction | ~10MB | Low | ~500KB | 0.5-2s |
-| With 1 small PDF (<1MB) | ~15MB | Medium | +1MB | +2-3s |
-| With 1 large PDF (1-5MB) | ~20MB | High | +5MB | +5-13s |
-| With multiple PDFs | +5-10MB per PDF | High per PDF | +size per PDF | +2-10s per PDF |
+| Operation                | Memory          | CPU          | Network       | Time           |
+| ------------------------ | --------------- | ------------ | ------------- | -------------- |
+| Without extraction       | ~10MB           | Low          | ~500KB        | 0.5-2s         |
+| With 1 small PDF (<1MB)  | ~15MB           | Medium       | +1MB          | +2-3s          |
+| With 1 large PDF (1-5MB) | ~20MB           | High         | +5MB          | +5-13s         |
+| With multiple PDFs       | +5-10MB per PDF | High per PDF | +size per PDF | +2-10s per PDF |
 
 ### Optimization Strategies
 
@@ -320,6 +330,7 @@ describe('PDF extraction validation', () => {
 ```
 
 **Test Coverage**:
+
 - ✅ Schema validation with extraction enabled
 - ✅ Cross-parameter validation
 - ✅ Default value handling
@@ -329,6 +340,7 @@ describe('PDF extraction validation', () => {
 ### Snapshot Updates
 
 Updated `src/__snapshots__/index.test.ts.snap` to reflect:
+
 - New parameters in `mail_imap_get_message` schema
 - Updated tool description
 - Property ordering (alphabetical per Zod)
@@ -452,7 +464,7 @@ Updated `src/__snapshots__/index.test.ts.snap` to reflect:
 2. **src/contracts.ts**: Schema updates for parameters and output
 3. **src/index.ts**: Core implementation
 4. **src/index.test.ts**: Test cases
-5. **src/__snapshots__/index.test.ts.snap**: Updated snapshots
+5. **src/**snapshots**/index.test.ts.snap**: Updated snapshots
 
 ## Conclusion
 
