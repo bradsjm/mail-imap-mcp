@@ -56,6 +56,13 @@ export const SearchMessagesInputSchema = z
   .object({
     account_id: DefaultAccountIdSchema,
     mailbox: MailboxSchema,
+    last_days: z
+      .number()
+      .int()
+      .min(1)
+      .max(365)
+      .optional()
+      .describe('Search only messages from the last N days (UTC, inclusive).'),
     query: z.string().min(1).max(256).optional(),
     from: z.string().min(1).max(256).optional(),
     to: z.string().min(1).max(256).optional(),
@@ -66,7 +73,16 @@ export const SearchMessagesInputSchema = z
     limit: LimitSchema,
     page_token: PageTokenSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.last_days !== undefined && (value.start_date || value.end_date)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either last_days or start_date/end_date, not both.',
+        path: ['last_days'],
+      });
+    }
+  });
 
 export const GetMessageInputSchema = z
   .object({

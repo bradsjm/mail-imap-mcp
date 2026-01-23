@@ -10,7 +10,7 @@ Responses are JSON-encoded text and include:
 - `summary`: concise human-readable summary
 - `data`: structured payload aligned to the tool contract
 - `hints`: suggested next tool calls with minimal arguments
-- `_meta`: optional pagination or capability metadata
+- `_meta`: optional metadata (e.g., `now_utc`, pagination, capabilities)
 
 ## Capabilities
 
@@ -41,8 +41,9 @@ Search messages in a mailbox with filters and pagination.
 Inputs include:
 
 - `account_id`, `mailbox`
+- `last_days` (integer, optional; search recent messages without providing explicit dates)
 - `query`, `from`, `to`, `subject`
-- `unread_only`, `start_date`, `end_date`
+- `unread_only`, `start_date`, `end_date` (do not combine with `last_days`)
 - `limit`, `page_token`
 
 ### `mail_imap_get_message`
@@ -154,7 +155,7 @@ This server returns a single `text` content item whose text is a JSON object:
       "reason": "Fetch full details for the first message."
     }
   ],
-  "_meta": { "next_page_token": "..." }
+  "_meta": { "now_utc": "2026-01-23T12:34:56.789Z", "next_page_token": "..." }
 }
 ```
 

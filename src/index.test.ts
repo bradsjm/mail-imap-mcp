@@ -41,6 +41,16 @@ describe('tool contracts', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects search input mixing last_days with explicit dates', () => {
+    const result = SearchMessagesInputSchema.safeParse({
+      mailbox: 'INBOX',
+      last_days: 5,
+      start_date: '2026-01-01',
+      limit: 10,
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('requires delete confirmation', () => {
     const result = DeleteMessageInputSchema.safeParse({
       account_id: 'default',

@@ -62,6 +62,10 @@ function encodeToolResponseText(value: ToolJsonResponse): string {
   return JSON.stringify(value, null, 2);
 }
 
+function nowUtcIso(): string {
+  return new Date().toISOString();
+}
+
 function parseBooleanEnv(value: string | undefined, defaultValue: boolean): boolean {
   if (value === undefined) {
     return defaultValue;
@@ -502,6 +506,16 @@ function parseDateOnly(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
+function startOfUtcDay(value: Date): Date {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+}
+
+function lastDaysSinceUtc(lastDays: number): Date {
+  const today = startOfUtcDay(new Date());
+  today.setUTCDate(today.getUTCDate() - (lastDays - 1));
+  return today;
+}
+
 function hasCapability(client: ImapFlow, name: string): boolean {
   const key = name.toUpperCase();
   const value = client.capabilities.get(key);
@@ -510,6 +524,10 @@ function hasCapability(client: ImapFlow, name: string): boolean {
 
 function buildSearchQuery(args: z.infer<typeof SearchMessagesInputSchema>): SearchObject {
   const query: SearchObject = {};
+
+  if (args.last_days !== undefined) {
+    query.since = lastDaysSinceUtc(args.last_days);
+  }
 
   if (args.query) {
     query.text = args.query;
@@ -741,12 +759,22 @@ export function createServer(): Server {
                 return makeError('Search failed for this mailbox.');
               }
               if (results.length === 0) {
-                return makeOk(`Found 0 messages in ${args.mailbox}.`, {
-                  account_id: args.account_id,
-                  mailbox: args.mailbox,
-                  total: 0,
-                  messages: [],
-                });
+                const meta: Record<string, unknown> = { now_utc: nowUtcIso() };
+                if (args.last_days !== undefined) {
+                  meta['last_days'] = args.last_days;
+                  meta['effective_since_utc'] = lastDaysSinceUtc(args.last_days).toISOString();
+                }
+                return makeOk(
+                  `Found 0 messages in ${args.mailbox}.`,
+                  {
+                    account_id: args.account_id,
+                    mailbox: args.mailbox,
+                    total: 0,
+                    messages: [],
+                  },
+                  [],
+                  meta,
+                );
               }
               uids = results.slice().sort((a, b) => b - a);
               total = uids.length;
@@ -757,12 +785,22 @@ export function createServer(): Server {
               if (args.page_token) {
                 SEARCH_CURSOR_STORE.delete(args.page_token);
               }
-              return makeOk('No more results. Run the search again to refresh.', {
-                account_id: args.account_id,
-                mailbox: args.mailbox,
-                total,
-                messages: [],
-              });
+              const meta: Record<string, unknown> = { now_utc: nowUtcIso() };
+              if (args.last_days !== undefined) {
+                meta['last_days'] = args.last_days;
+                meta['effective_since_utc'] = lastDaysSinceUtc(args.last_days).toISOString();
+              }
+              return makeOk(
+                'No more results. Run the search again to refresh.',
+                {
+                  account_id: args.account_id,
+                  mailbox: args.mailbox,
+                  total,
+                  messages: [],
+                },
+                [],
+                meta,
+              );
             }
 
             const pageUids = uids.slice(offset, offset + args.limit);
@@ -858,6 +896,15 @@ export function createServer(): Server {
               });
             }
 
+            const meta: Record<string, unknown> = { now_utc: nowUtcIso() };
+            if (nextToken) {
+              meta['next_page_token'] = nextToken;
+            }
+            if (args.last_days !== undefined) {
+              meta['last_days'] = args.last_days;
+              meta['effective_since_utc'] = lastDaysSinceUtc(args.last_days).toISOString();
+            }
+
             return makeOk(
               header,
               {
@@ -868,7 +915,7 @@ export function createServer(): Server {
                 next_page_token: nextToken,
               },
               hints,
-              nextToken ? { next_page_token: nextToken } : undefined,
+              meta,
             );
           } finally {
             lock.release();
@@ -1011,6 +1058,7 @@ export function createServer(): Server {
                 },
               },
               hints,
+              { now_utc: nowUtcIso() },
             );
           } finally {
             lock.release();
