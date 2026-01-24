@@ -5,9 +5,9 @@ import {
   ListMailboxesInputSchema,
   SearchMessagesInputSchema,
   UpdateMessageFlagsInputSchema,
-} from './contracts.js';
-import { MessageIdSchema } from './message-id.js';
-import { getListedTools, scrubSecrets, validateEnvironment } from './index.js';
+} from '../src/contracts.js';
+import { MessageIdSchema } from '../src/message-id.js';
+import { getListedTools, scrubSecrets, validateEnvironment } from '../src/index.js';
 
 describe('scrubSecrets', () => {
   it('redacts secret-ish keys recursively', () => {

@@ -3,7 +3,7 @@ import {
   CursorStore,
   sliceUidsFromDescendingRanges,
   uidsToDescendingRanges,
-} from './pagination.js';
+} from '../src/pagination.js';
 
 describe('CursorStore', () => {
   it('creates and updates search cursors', () => {
