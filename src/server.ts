@@ -1,10 +1,25 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { TOOL_DEFINITIONS, type ToolDefinition } from './contracts.js';
-import { WRITE_ENABLED } from './config.js';
-import { WRITE_TOOLS } from './policy.js';
 import { handleToolCall } from './handler.js';
+import { getAvailableTools } from './utils/tools.js';
 
+/**
+ * Create and configure an MCP server for IMAP email operations.
+ *
+ * Initializes a new Model Context Protocol server with the mail-imap-mcp
+ * capabilities, registers all available IMAP tools, and sets up the routing
+ * from tool calls to their respective handler functions.
+ *
+ * The server is configured with:
+ * - A static name and version identifier
+ * - Tool capabilities for email operations (list, search, get, move, delete, etc.)
+ * - Write-operation filtering based on environment configuration
+ *
+ * @returns A configured McpServer instance ready to be connected to a transport
+ */
 export function createServer(): McpServer {
+  // Initialize the MCP server with metadata and capabilities
+  // The capabilities object declares what features this server supports
   const server = new McpServer(
     { name: 'mail-imap-mcp', version: '0.1.0' },
     {
@@ -14,13 +29,12 @@ export function createServer(): McpServer {
     },
   );
 
-  const available: readonly ToolDefinition[] = TOOL_DEFINITIONS.filter((tool) => {
-    if (WRITE_ENABLED) {
-      return true;
-    }
-    return !WRITE_TOOLS.has(tool.name);
-  });
+  // Filter tool definitions based on write-enable policy
+  // If MAIL_IMAP_WRITE_ENABLED is false, write operations (move, delete, flag updates) are excluded
+  const available: readonly ToolDefinition[] = getAvailableTools(TOOL_DEFINITIONS);
 
+  // Register each available tool with the server
+  // This creates the mapping between tool names and their handler functions
   for (const tool of available) {
     server.registerTool(
       tool.name,

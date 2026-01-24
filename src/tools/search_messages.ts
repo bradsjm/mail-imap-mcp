@@ -1,8 +1,85 @@
 import type { z } from 'zod';
 
 import type { SearchMessagesInputSchema } from '../contracts.js';
-import { loadAccountConfig, normalizeEnvSegment } from '../config.js';
 import { encodeMessageId } from '../message-id.js';
+
+/**
+ * Handle the mail_imap_search_messages tool call.
+ *
+ * Searches for messages in an IMAP mailbox based on various criteria (date range,
+ * sender, recipient, subject, text content, read status, etc.). This tool supports
+ * pagination to handle large result sets efficiently.
+ *
+ * The tool performs the following steps:
+ * 1. Validates that search filters are not combined with page_token (invalid operation)
+ * 2. Validates that the account is properly configured
+ * 3. Establishes an IMAP connection and obtains a read lock on the mailbox
+ * 4. If page_token is provided:
+ *    - Retrieves the cursor and validates it (not expired, matches account/mailbox)
+ *    - Verifies the mailbox hasn't changed (UIDVALIDITY still matches)
+ *    - Uses the cursor's UID ranges for pagination
+ * 5. If no page_token:
+ *    - Builds an IMAP SEARCH query from the provided filters
+ *    - Executes the search to get matching UIDs
+ *    - Sorts UIDs in descending order (newest first)
+ *    - Compresses UIDs into ranges for efficient storage (if under MAX_SEARCH_MATCHES_FOR_PAGINATION)
+ *    - Creates a cursor for pagination (or disables pagination if too many matches)
+ * 6. Fetches message metadata for the requested page of messages
+ * 7. Optionally extracts and includes body snippets for each message
+ * 8. Returns the page of results with a next_page_token if more results exist
+ * 9. If the cursor becomes outdated or expired, invalidates it
+ *
+ * Pagination details:
+ * - Cursors are stored in memory with a 10-minute TTL
+ * - Maximum 200 concurrent cursors are stored
+ * - Pagination is disabled if search matches exceed MAX_SEARCH_MATCHES_FOR_PAGINATION
+ * - Each page contains up to `limit` messages (default 10, max 50)
+ *
+ * Search filters:
+ * - last_days: Messages from the last N days (UTC, inclusive)
+ * - start_date/end_date: Date range in YYYY-MM-DD format
+ * - from/to/subject: Filter by sender, recipient, or subject
+ * - query: Full-text search across message body
+ * - unread_only: Only show unread messages
+ * - include_snippet: Include a short body snippet (may require extra IO)
+ *
+ * @example
+ * ```ts
+ * // Initial search
+ * const result = await handleSearchMessages({
+ *   account_id: 'default',
+ *   mailbox: 'INBOX',
+ *   from: 'sender@example.com',
+ *   unread_only: true,
+ *   limit: 10
+ * });
+ * // Returns: {
+ * //   account_id: 'default',
+ * //   mailbox: 'INBOX',
+ * //   total: 25,
+ * //   messages: [...10 messages...],
+ * //   next_page_token: 'uuid-of-cursor'
+ * // }
+ *
+ * // Next page
+ * const nextResult = await handleSearchMessages({
+ *   account_id: 'default',
+ *   mailbox: 'INBOX',
+ *   page_token: 'uuid-of-cursor',
+ *   limit: 10
+ * });
+ * // Returns: {
+ * //   account_id: 'default',
+ * //   mailbox: 'INBOX',
+ * //   total: 25,
+ * //   messages: [...next 10 messages...],
+ * //   next_page_token: 'another-uuid' // or undefined if end of results
+ * // }
+ * ```
+ *
+ * @param args - The validated input arguments containing search filters and pagination options
+ * @returns A ToolResult containing the search results, pagination token, or an error message
+ */
 import {
   buildSearchQuery,
   getMessageSnippet,
@@ -25,10 +102,15 @@ import {
   type UidRange,
   uidsToDescendingRanges,
 } from '../pagination.js';
+import { loadAccountOrError } from '../utils/account.js';
+import { openMailboxLock } from '../utils/mailbox.js';
 
 export async function handleSearchMessages(
   args: z.infer<typeof SearchMessagesInputSchema>,
 ): Promise<ToolResult> {
+  // Validate that page_token is not combined with search filters
+  // This would be an invalid operation because page_token represents a specific
+  // snapshot of search results, and additional filters would require a new search
   if (
     args.page_token &&
     (args.query ||
@@ -43,40 +125,37 @@ export async function handleSearchMessages(
     return makeError('Do not combine page_token with additional search filters.');
   }
 
-  const account = loadAccountConfig(args.account_id);
-  if (!account) {
-    const prefix = `MAIL_IMAP_${normalizeEnvSegment(args.account_id)}_`;
-    return makeError(
-      [
-        `Account '${args.account_id}' is not configured.`,
-        `Set env vars:`,
-        `- ${prefix}HOST`,
-        `- ${prefix}USER`,
-        `- ${prefix}PASS`,
-        `Optional: ${prefix}PORT (default 993), ${prefix}SECURE (default true)`,
-      ].join('\n'),
-    );
+  // Validate that the account is configured before attempting to connect
+  const accountResult = loadAccountOrError(args.account_id);
+  if ('error' in accountResult) {
+    return makeError(accountResult.error);
   }
+  const account = accountResult.account;
 
   return await withImapClient(account, async (client) => {
-    const lock = await client.getMailboxLock(args.mailbox, {
+    // Obtain a read lock on the mailbox to search
+    // We don't specify expectedUidvalidity here because page_token handles that check
+    const lockResult = await openMailboxLock(client, args.mailbox, {
       readOnly: true,
       description: 'mail_imap_search_messages',
     });
+    if ('error' in lockResult) {
+      return makeError(lockResult.error);
+    }
+    const { lock, uidvalidity: mailboxUidvalidity } = lockResult;
     try {
-      const mailboxInfo = client.mailbox;
-      if (!mailboxInfo) {
-        return makeError('Mailbox could not be opened.');
-      }
-      const mailboxUidvalidity = Number(mailboxInfo.uidValidity ?? 0n);
-
+      // If page_token is provided, retrieve the cursor and validate it
       const cursor = args.page_token ? SEARCH_CURSOR_STORE.getSearchCursor(args.page_token) : null;
       if (args.page_token && !cursor) {
         return makeError('page_token is invalid or expired. Run the search again.');
       }
+      // Validate that the cursor matches the requested account and mailbox
+      // This prevents using a cursor from one account/mailbox on another
       if (cursor && (cursor.account_id !== args.account_id || cursor.mailbox !== args.mailbox)) {
         return makeError('page_token does not match the requested mailbox or account.');
       }
+      // Validate that the mailbox hasn't changed since the cursor was created
+      // UIDVALIDITY changes when a mailbox is deleted and recreated, making old UIDs invalid
       if (cursor && cursor.uidvalidity !== mailboxUidvalidity) {
         SEARCH_CURSOR_STORE.delete(cursor.id);
         return makeError('Mailbox snapshot has changed. Run the search again to refresh.');
@@ -91,6 +170,8 @@ export async function handleSearchMessages(
       let paginationDisabled = false;
       let uidRanges: readonly UidRange[] = [];
 
+      // If using a cursor, extract pre-computed values from it
+      // This avoids re-running the search and ensures consistent pagination
       if (cursor) {
         uidRanges = cursor.uid_ranges;
         total = cursor.total;
@@ -99,13 +180,16 @@ export async function handleSearchMessages(
         includeSnippet = cursor.include_snippet;
         snippetMaxChars = cursor.snippet_max_chars;
       } else {
+        // Perform a new search: build query from filters and execute it
         const searchQuery = buildSearchQuery(args);
         const results = await client.search(searchQuery, { uid: true });
         if (!results) {
           return makeError('Search failed for this mailbox.');
         }
+        // Sort UIDs in descending order (newest messages first)
         const searchResults: number[] = results.slice().sort((a, b) => b - a);
         if (searchResults.length === 0) {
+          // No results: return early with metadata about the search
           const meta: Record<string, unknown> = {
             now_utc: nowUtcIso(),
             security_note: UNTRUSTED_EMAIL_CONTENT_NOTE,
@@ -130,6 +214,8 @@ export async function handleSearchMessages(
         uids = searchResults;
         total = uids.length;
         offset = 0;
+        // Disable pagination if there are too many matches to store in memory
+        // This prevents excessive memory usage and simplifies handling of large result sets
         paginationDisabled = total > MAX_SEARCH_MATCHES_FOR_PAGINATION;
         if (!paginationDisabled) {
           uidRanges = uidsToDescendingRanges(uids);
@@ -138,7 +224,9 @@ export async function handleSearchMessages(
         }
       }
 
+      // Check if we've reached the end of results
       if (offset >= total) {
+        // Clean up the cursor if we're at the end of pagination
         if (args.page_token) {
           SEARCH_CURSOR_STORE.delete(args.page_token);
         }
@@ -164,6 +252,8 @@ export async function handleSearchMessages(
         );
       }
 
+      // Extract the page of UIDs to fetch
+      // Use compressed ranges if pagination is enabled, otherwise slice the array
       const pageUids: number[] = cursor
         ? sliceUidsFromDescendingRanges(uidRanges, offset, args.limit)
         : uids.slice(offset, offset + args.limit);
@@ -180,6 +270,8 @@ export async function handleSearchMessages(
       pageUids.forEach((uid, index) => {
         order.set(uid, index);
       });
+      // Sort messages to match the order they were requested
+      // IMAP FETCH may return messages in any order, so we sort by UID
       fetchResults.sort((a, b) => {
         const aIndex = order.get(a.uid ?? 0) ?? 0;
         const bIndex = order.get(b.uid ?? 0) ?? 0;
@@ -193,6 +285,7 @@ export async function handleSearchMessages(
           }
           const envelopeSummary = summarizeEnvelope(message.envelope);
           const uid = message.uid;
+          // Create a stable message ID that can be used in subsequent tool calls
           const messageId = encodeMessageId({
             account_id: args.account_id,
             mailbox: args.mailbox,
@@ -224,13 +317,17 @@ export async function handleSearchMessages(
         }
       }
 
+      // Calculate the next offset and determine if we need a pagination token
       const nextOffset = offset + pageUids.length;
       let nextToken: string | undefined;
       if (nextOffset < total && !paginationDisabled) {
+        // More results available: create or update the cursor
         if (args.page_token) {
+          // Update existing cursor with new offset
           const updated = SEARCH_CURSOR_STORE.updateSearchCursor(args.page_token, nextOffset);
           nextToken = updated?.id ?? args.page_token;
         } else {
+          // Create a new cursor for the first page
           const created = SEARCH_CURSOR_STORE.createSearchCursor({
             tool: 'mail_imap_search_messages',
             account_id: args.account_id,
@@ -245,11 +342,14 @@ export async function handleSearchMessages(
           nextToken = created.id;
         }
       } else if (args.page_token) {
+        // End of pagination: clean up the cursor
         SEARCH_CURSOR_STORE.delete(args.page_token);
       }
 
+      // Create a helpful summary message
       const header = `Found ${total} messages in ${args.mailbox}. Showing ${summaries.length} starting at ${offset + 1}.`;
       const hints: ToolHint[] = [];
+      // Suggest viewing the first message if any results were returned
       const firstMessage = summaries[0];
       if (firstMessage) {
         hints.push({
@@ -261,6 +361,7 @@ export async function handleSearchMessages(
           reason: 'Fetch full details for the first message in this page.',
         });
       }
+      // Suggest fetching the next page if pagination is available
       if (nextToken) {
         hints.push({
           tool: 'mail_imap_search_messages',
@@ -281,6 +382,7 @@ export async function handleSearchMessages(
       if (nextToken) {
         meta['next_page_token'] = nextToken;
       }
+      // Include metadata about pagination state and search parameters
       if (paginationDisabled) {
         meta['pagination_disabled'] = true;
         meta['pagination_disabled_reason'] = 'too_many_matches';
@@ -308,6 +410,8 @@ export async function handleSearchMessages(
         meta,
       );
     } finally {
+      // Always release the lock, even if an error occurred
+      // This prevents deadlock and allows other operations to proceed
       lock.release();
     }
   });

@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { MessageIdSchema } from './message-id.js';
 
+/**
+ * All supported IMAP tool names.
+ *
+ * Each tool name corresponds to a specific email operation that can be
+ * performed through the MCP server. These names are used for routing
+ * tool calls to their respective handlers.
+ */
 export type ToolName =
   | 'mail_imap_list_mailboxes'
   | 'mail_imap_search_messages'
@@ -10,21 +17,62 @@ export type ToolName =
   | 'mail_imap_move_message'
   | 'mail_imap_delete_message';
 
+/**
+ * Definition of an IMAP tool including name, description, and schemas.
+ *
+ * This type defines the metadata and validation schemas for each tool.
+ * The input schema validates user arguments, while the output schema
+ * defines the structure of successful responses.
+ */
 export type ToolDefinition = Readonly<{
+  /** The unique identifier for this tool */
   name: ToolName;
+  /** Human-readable description of what this tool does */
   description: string;
+  /** Zod schema for validating tool input arguments */
   inputSchema: z.ZodTypeAny;
+  /** Zod schema for validating tool output data */
   outputSchema: z.ZodTypeAny;
 }>;
 
+/**
+ * Schema for validating IMAP account identifiers.
+ *
+ * Account IDs are configured via environment variables following the
+ * pattern `MAIL_IMAP_{ACCOUNT_ID}_*`. The ID is normalized to uppercase
+ * and alphanumeric characters for consistency.
+ */
 const AccountIdSchema = z.string().min(1).max(64).describe('Configured IMAP account identifier.');
 
+/**
+ * Schema for validating account identifiers with a default value.
+ *
+ * When omitted, this defaults to 'default', which is the standard
+ * account ID for single-account configurations.
+ */
 const DefaultAccountIdSchema = AccountIdSchema.default('default').describe(
   "Configured IMAP account identifier. Defaults to 'default' if omitted.",
 );
 
+/**
+ * Schema for validating IMAP mailbox names.
+ *
+ * Mailbox names are case-sensitive paths on the IMAP server. Common
+ * examples include 'INBOX', 'Sent', 'Drafts', 'Archive', etc. Hierarchical
+ * mailboxes use delimiters (typically '/') such as 'Work/Projects'.
+ */
 const MailboxSchema = z.string().min(1).max(256).describe('Mailbox name (e.g., INBOX).');
 
+/**
+ * Validate that a string represents a real calendar date.
+ *
+ * Checks that the string matches the YYYY-MM-DD format and represents
+ * a valid date (e.g., not February 30). This is used to validate
+ * date range inputs for email search operations.
+ *
+ * @param value - The date string to validate
+ * @returns True if the string is a valid date, false otherwise
+ */
 function isValidDateOnly(value: string): boolean {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) {
@@ -46,6 +94,13 @@ function isValidDateOnly(value: string): boolean {
   return day <= daysInMonth;
 }
 
+/**
+ * Schema for validating date-only strings in YYYY-MM-DD format.
+ *
+ * This schema ensures that date inputs are both properly formatted and
+ * represent valid calendar dates. It's used for date range filtering
+ * in search operations.
+ */
 const DateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -54,6 +109,13 @@ const DateSchema = z
   })
   .describe('Date in YYYY-MM-DD format.');
 
+/**
+ * Schema for validating pagination limit parameters.
+ *
+ * Controls how many items are returned in a single page of results.
+ * The limit is constrained to 1-50 to prevent excessive response sizes
+ * and ensure reasonable performance.
+ */
 const LimitSchema = z
   .number()
   .int()
@@ -62,20 +124,52 @@ const LimitSchema = z
   .default(10)
   .describe('Maximum number of items to return (1-50).');
 
+/**
+ * Schema for validating pagination tokens.
+ *
+ * Page tokens are opaque strings returned by search operations that allow
+ * fetching subsequent pages of results. They encode search state including
+ * matched UIDs, current offset, and expiration time.
+ */
 const PageTokenSchema = z
   .string()
   .min(1)
   .max(2048)
   .describe('Opaque pagination token from a previous response.');
 
+/**
+ * Schema for validating IMAP message flags.
+ *
+ * IMAP flags (also known as labels or tags) can be system flags like
+ * \Seen, \Answered, \Flagged, \Deleted, \Draft, or user-defined flags.
+ * System flags must include the backslash prefix.
+ */
 const FlagSchema = z.string().min(1).max(64).describe('IMAP system or user flag (e.g., \\Seen).');
 
+/**
+ * Input schema for the mail_imap_list_mailboxes tool.
+ *
+ * Lists all available mailboxes for a configured IMAP account.
+ * This is a read-only operation that discovers mailbox names.
+ */
 export const ListMailboxesInputSchema = z
   .object({
     account_id: DefaultAccountIdSchema,
   })
   .strict();
 
+/**
+ * Input schema for the mail_imap_search_messages tool.
+ *
+ * Searches for messages in an IMAP mailbox based on various criteria.
+ * Supports date ranges, sender/recipient/subject filters, full-text search,
+ * read status filtering, and pagination. Multiple filters can be combined.
+ *
+ * Validation rules:
+ * - Cannot combine last_days with start_date/end_date
+ * - start_date must be on or before end_date
+ * - snippet_max_chars is only valid when include_snippet is true
+ */
 export const SearchMessagesInputSchema = z
   .object({
     account_id: DefaultAccountIdSchema,
@@ -135,6 +229,16 @@ export const SearchMessagesInputSchema = z
     }
   });
 
+/**
+ * Input schema for the mail_imap_get_message tool.
+ *
+ * Retrieves a single email message by its stable identifier and returns
+ * parsed headers, body text (and optionally HTML), and attachment summaries.
+ * Options control what data is included and how much is returned.
+ *
+ * Validation rules:
+ * - attachment_text_max_chars is only valid when extract_attachment_text is true
+ */
 export const GetMessageInputSchema = z
   .object({
     account_id: DefaultAccountIdSchema,
@@ -171,6 +275,13 @@ export const GetMessageInputSchema = z
     }
   });
 
+/**
+ * Input schema for the mail_imap_get_message_raw tool.
+ *
+ * Retrieves the raw RFC822 source of an email message. This is the complete,
+ * unparsed message as received from the mail server. The max_bytes parameter
+ * limits memory usage for large messages.
+ */
 export const GetMessageRawInputSchema = z
   .object({
     account_id: DefaultAccountIdSchema,
@@ -179,6 +290,15 @@ export const GetMessageRawInputSchema = z
   })
   .strict();
 
+/**
+ * Input schema for the mail_imap_update_message_flags tool.
+ *
+ * Updates IMAP message flags (also known as labels or tags). Flags can be
+ * added or removed. At least one of add_flags or remove_flags must be provided.
+ *
+ * Validation rules:
+ * - Must provide add_flags, remove_flags, or both
+ */
 export const UpdateMessageFlagsInputSchema = z
   .object({
     account_id: DefaultAccountIdSchema,
@@ -197,6 +317,13 @@ export const UpdateMessageFlagsInputSchema = z
     }
   });
 
+/**
+ * Input schema for the mail_imap_move_message tool.
+ *
+ * Moves a message from one mailbox to another. This operation removes the
+ * message from its original mailbox and places it in the destination mailbox.
+ * The tool automatically chooses the best strategy based on server capabilities.
+ */
 export const MoveMessageInputSchema = z
   .object({
     account_id: DefaultAccountIdSchema,
@@ -205,6 +332,13 @@ export const MoveMessageInputSchema = z
   })
   .strict();
 
+/**
+ * Input schema for the mail_imap_delete_message tool.
+ *
+ * Permanently deletes a specific message from an IMAP mailbox. This is a
+ * destructive operation that requires explicit confirmation via the confirm=true
+ * parameter to prevent accidental deletions.
+ */
 export const DeleteMessageInputSchema = z
   .object({
     account_id: DefaultAccountIdSchema,
@@ -213,6 +347,13 @@ export const DeleteMessageInputSchema = z
   })
   .strict();
 
+/**
+ * Output schema for a mailbox summary.
+ *
+ * Contains basic information about a mailbox, including its name,
+ * hierarchy delimiter, and message counts. This is returned by the
+ * list_mailboxes tool.
+ */
 export const MailboxSummarySchema = z
   .object({
     name: MailboxSchema,
@@ -222,6 +363,13 @@ export const MailboxSummarySchema = z
   })
   .strict();
 
+/**
+ * Output schema for an attachment summary.
+ *
+ * Contains metadata about an email attachment, including filename,
+ * content type, size, part identifier, and optionally extracted text
+ * (for PDFs when text extraction is requested).
+ */
 export const AttachmentSummarySchema = z
   .object({
     filename: z.string().min(1).max(256).optional(),
@@ -232,6 +380,13 @@ export const AttachmentSummarySchema = z
   })
   .strict();
 
+/**
+ * Output schema for a message summary.
+ *
+ * Contains key metadata about a message without the full body. This is
+ * returned by the search_messages tool and includes envelope information,
+ * flags, and an optional body snippet.
+ */
 export const MessageSummarySchema = z
   .object({
     message_id: MessageIdSchema,
@@ -246,6 +401,13 @@ export const MessageSummarySchema = z
   })
   .strict();
 
+/**
+ * Output schema for a message with full details.
+ *
+ * Contains complete information about a message including envelope data,
+ * flags, headers, body text (and optionally HTML), and attachment summaries.
+ * This is returned by the get_message tool.
+ */
 export const MessageDetailSchema = z
   .object({
     message_id: MessageIdSchema,
@@ -265,6 +427,12 @@ export const MessageDetailSchema = z
   })
   .strict();
 
+/**
+ * Output schema for the list_mailboxes tool.
+ *
+ * Returns all available mailboxes for an account along with their metadata.
+ * Limited to 200 mailboxes per account to prevent excessive output.
+ */
 export const ListMailboxesResultSchema = z
   .object({
     account_id: AccountIdSchema,
@@ -272,6 +440,13 @@ export const ListMailboxesResultSchema = z
   })
   .strict();
 
+/**
+ * Output schema for the search_messages tool.
+ *
+ * Returns a page of search results with pagination support. Includes
+ * the total count of matching messages, the current page of message summaries,
+ * and an optional token for fetching the next page.
+ */
 export const SearchMessagesResultSchema = z
   .object({
     account_id: AccountIdSchema,
@@ -282,6 +457,12 @@ export const SearchMessagesResultSchema = z
   })
   .strict();
 
+/**
+ * Output schema for the get_message tool.
+ *
+ * Returns the full details of a single message including envelope data,
+ * headers, body content, and attachment summaries.
+ */
 export const GetMessageResultSchema = z
   .object({
     account_id: AccountIdSchema,
@@ -289,6 +470,12 @@ export const GetMessageResultSchema = z
   })
   .strict();
 
+/**
+ * Output schema for the get_message_raw tool.
+ *
+ * Returns the raw RFC822 source of a message. The content is limited
+ * to 1MB by the schema to prevent excessive response sizes.
+ */
 export const GetMessageRawResultSchema = z
   .object({
     account_id: AccountIdSchema,
@@ -298,6 +485,13 @@ export const GetMessageRawResultSchema = z
   })
   .strict();
 
+/**
+ * Output schema for the update_message_flags tool.
+ *
+ * Returns the updated set of flags for the message after the operation
+ * completes. This reflects the actual state after both add and remove
+ * operations were applied.
+ */
 export const UpdateMessageFlagsResultSchema = z
   .object({
     account_id: AccountIdSchema,
@@ -306,6 +500,13 @@ export const UpdateMessageFlagsResultSchema = z
   })
   .strict();
 
+/**
+ * Output schema for the move_message tool.
+ *
+ * Returns confirmation that a message was moved, including source and
+ * destination mailboxes. If the server supports UIDPLUS, the new message
+ * ID for the moved message is also provided.
+ */
 export const MoveMessageResultSchema = z
   .object({
     account_id: AccountIdSchema,
@@ -316,6 +517,12 @@ export const MoveMessageResultSchema = z
   })
   .strict();
 
+/**
+ * Output schema for the delete_message tool.
+ *
+ * Returns confirmation that a message was deleted, including the account
+ * ID, mailbox name, and the message ID of the deleted message.
+ */
 export const DeleteMessageResultSchema = z
   .object({
     account_id: AccountIdSchema,
@@ -324,6 +531,27 @@ export const DeleteMessageResultSchema = z
   })
   .strict();
 
+/**
+ * Complete list of all available IMAP tool definitions.
+ *
+ * This readonly array contains the definitions for all tools supported by
+ * the MCP server. Each definition includes the tool name, description,
+ * input validation schema, and output validation schema.
+ *
+ * Tools are categorized as:
+ * - Read operations (list, search, get): Always available
+ * - Write operations (move, delete, flag updates): Only available when
+ *   MAIL_IMAP_WRITE_ENABLED=true
+ *
+ * Tool purposes:
+ * - mail_imap_list_mailboxes: Discover available mailboxes
+ * - mail_imap_search_messages: Find messages matching criteria
+ * - mail_imap_get_message: Retrieve parsed message content
+ * - mail_imap_get_message_raw: Retrieve raw RFC822 source
+ * - mail_imap_update_message_flags: Modify message flags/labels
+ * - mail_imap_move_message: Move message to another mailbox
+ * - mail_imap_delete_message: Permanently delete a message
+ */
 export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   {
     name: 'mail_imap_list_mailboxes',
