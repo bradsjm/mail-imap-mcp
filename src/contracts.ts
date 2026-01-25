@@ -42,7 +42,14 @@ export type ToolDefinition = Readonly<{
  * pattern `MAIL_IMAP_{ACCOUNT_ID}_*`. The ID is normalized to uppercase
  * and alphanumeric characters for consistency.
  */
-const AccountIdSchema = z.string().min(1).max(64).describe('Configured IMAP account identifier.');
+const AccountIdSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z0-9_-]+$/, {
+    message: 'Account ID must be env-var friendly (letters, numbers, "_" or "-").',
+  })
+  .describe('Configured IMAP account identifier (env-var friendly; no colons).');
 
 /**
  * Schema for validating account identifiers with a default value.

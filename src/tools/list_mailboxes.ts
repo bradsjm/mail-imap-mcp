@@ -60,12 +60,16 @@ export async function handleListMailboxes(
       delimiter: mailbox.delimiter != '/' ? mailbox.delimiter : undefined,
     }))
     .filter((mailbox) => typeof mailbox.name === 'string');
+  const limitedMailboxes = mailboxSummaries.slice(0, 200);
   // Provide a helpful summary message showing how many mailboxes were found
-  const summaryText = `Mailboxes (${mailboxSummaries.length}) fetched.`;
+  const summaryText =
+    mailboxSummaries.length > limitedMailboxes.length
+      ? `Mailboxes (${mailboxSummaries.length}) fetched. Showing first ${limitedMailboxes.length}.`
+      : `Mailboxes (${mailboxSummaries.length}) fetched.`;
 
   // Create actionable hints to guide the user's next steps
   const hints: ToolHint[] = [];
-  const firstMailbox = mailboxSummaries[0]?.name;
+  const firstMailbox = limitedMailboxes[0]?.name;
 
   // Suggest searching the first mailbox if one exists
   // This helps users quickly see what's available without additional tool calls
@@ -85,7 +89,7 @@ export async function handleListMailboxes(
     summaryText,
     {
       account_id: args.account_id,
-      mailboxes: mailboxSummaries,
+      mailboxes: limitedMailboxes,
     },
     hints,
   );

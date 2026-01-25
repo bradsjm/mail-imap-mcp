@@ -175,6 +175,7 @@ export async function handleGetMessage(
         decoded.uid,
         args.extract_attachment_text,
         args.attachment_text_max_chars,
+        50,
       );
 
       // Re-encode the message ID with the current mailbox state

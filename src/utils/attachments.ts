@@ -66,9 +66,10 @@ export async function collectAttachmentSummaries(
   uid: number = 0,
   extractPdfText: boolean = false,
   maxTextChars: number = 10000,
+  maxSummaries: number = 50,
 ): Promise<void> {
   // Base case: stop recursion if there's no node to process
-  if (!node) {
+  if (!node || summaries.length >= maxSummaries) {
     return;
   }
   // Determine if this node represents an attachment by checking its content disposition
@@ -140,14 +141,27 @@ export async function collectAttachmentSummaries(
     }
 
     // Add the attachment summary to the results array
-    summaries.push(entry);
+    if (summaries.length < maxSummaries) {
+      summaries.push(entry);
+    }
   }
 
   // Recursively process child nodes to find nested attachments
   // MIME messages can have complex structures with multiple levels of nesting
-  if (node.childNodes) {
+  if (node.childNodes && summaries.length < maxSummaries) {
     for (const child of node.childNodes) {
-      await collectAttachmentSummaries(child, summaries, client, uid, extractPdfText, maxTextChars);
+      await collectAttachmentSummaries(
+        child,
+        summaries,
+        client,
+        uid,
+        extractPdfText,
+        maxTextChars,
+        maxSummaries,
+      );
+      if (summaries.length >= maxSummaries) {
+        break;
+      }
     }
   }
 }

@@ -204,27 +204,27 @@ These are common ways to invoke this server:
 ### Option 2: Run from this repo (dev, no build)
 
 - `command`: `pnpm`
-- `args`: `-C /Users/jonathan/Code/Projects/mail-imap-mcp dev`
+- `args`: `mail-imap-mcp dev`
 
 ### Option 3: Run from this repo (built)
 
 1. Build once:
 
    ```
-   pnpm -C /Users/jonathan/Code/Projects/mail-imap-mcp build
+   pnpm mail-imap-mcp build
    ```
 
 2. Spawn:
 
 - `command`: `node`
-- `args`: `/Users/jonathan/Code/Projects/mail-imap-mcp/dist/index.js`
+- `args`: `mail-imap-mcp/dist/index.js`
 
 ### Option 4: Install globally (true executable)
 
 1. Install:
 
    ```
-   pnpm -g add /Users/jonathan/Code/Projects/mail-imap-mcp
+   pnpm -g add mail-imap-mcp
    ```
 
 2. Spawn:
@@ -247,12 +247,6 @@ Exact configuration keys vary by chat application, but the shape usually looks l
 }
 ```
 
-### Quality gates
-
-```
-pnpm check
-```
-
 ## Notes
 
 - HTML content is sanitized before returning.
@@ -263,7 +257,3 @@ pnpm check
 - PDF extraction only processes attachments up to 5MB in size; larger PDFs are skipped.
 - PDF extraction failures are logged but don't fail the entire message retrieval request.
 - Use `extract_attachment_text` selectively when you actually need PDF content.
-
-## Development
-
-This repo whitelists `esbuild` build scripts via `package.json` (`pnpm.onlyBuiltDependencies`) so `tsx`/`vitest` work on pnpm installs that require build approvals.

@@ -37,6 +37,16 @@ describe('tool contracts', () => {
     expect(result.success).toBe(true);
   });
 
+  it('rejects non env-var friendly account ids', () => {
+    const result = ListMailboxesInputSchema.safeParse({ account_id: 'bad:id' });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts env-var friendly account ids', () => {
+    const result = ListMailboxesInputSchema.safeParse({ account_id: 'work_account-1' });
+    expect(result.success).toBe(true);
+  });
+
   it('rejects search input without mailbox', () => {
     const result = SearchMessagesInputSchema.safeParse({ account_id: 'default', limit: 10 });
     expect(result.success).toBe(false);
