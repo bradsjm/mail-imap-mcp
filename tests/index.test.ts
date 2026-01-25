@@ -7,6 +7,7 @@ import {
   UpdateMessageFlagsInputSchema,
 } from '../src/contracts.js';
 import { MessageIdSchema } from '../src/message-id.js';
+import { getHelpText } from '../src/help.js';
 import { getListedTools, scrubSecrets, validateEnvironment } from '../src/index.js';
 
 describe('scrubSecrets', () => {
@@ -117,6 +118,26 @@ describe('validateEnvironment', () => {
     };
     const errors = validateEnvironment();
     expect(errors).toEqual(["Account 'work' is missing required env vars: MAIL_IMAP_WORK_PASS"]);
+  });
+});
+
+describe('getHelpText', () => {
+  const originalEnv = process.env;
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('includes defaults and redacts secrets', () => {
+    process.env = {
+      MAIL_IMAP_DEFAULT_PASS: 'secret',
+    };
+    const helpText = getHelpText();
+    expect(helpText).toContain('MAIL_IMAP_DEFAULT_HOST=<unset>');
+    expect(helpText).toContain('MAIL_IMAP_DEFAULT_PORT=993 (default)');
+    expect(helpText).toContain('MAIL_IMAP_DEFAULT_SECURE=true (default)');
+    expect(helpText).toContain('MAIL_IMAP_DEFAULT_PASS=<redacted> (set)');
+    expect(helpText).toContain('MAIL_IMAP_WRITE_ENABLED=false (default)');
   });
 });
 

@@ -17,6 +17,13 @@ type AccountConfig = Readonly<{
   pass: string;
 }>;
 
+export const DEFAULT_PORT = 993;
+export const DEFAULT_SECURE = true;
+export const DEFAULT_WRITE_ENABLED = false;
+export const DEFAULT_CONNECT_TIMEOUT_MS = 30_000;
+export const DEFAULT_GREETING_TIMEOUT_MS = 15_000;
+export const DEFAULT_SOCKET_TIMEOUT_MS = 300_000;
+
 /**
  * Parse an environment variable string into a boolean value.
  *
@@ -93,9 +100,10 @@ export function normalizeEnvSegment(value: string): string {
  * @returns An array of error messages describing missing configuration.
  *          Returns an empty array if all configurations are valid.
  */
-export function validateEnvironment(): string[] {
-  const errors: string[] = [];
-  const requiredKeys: Array<{ accountId: string; prefix: string }> = [];
+export type AccountEnvEntry = Readonly<{ accountId: string; prefix: string }>;
+
+export function getAccountEnvEntries(): AccountEnvEntry[] {
+  const entries: AccountEnvEntry[] = [];
   const hostKeyPattern = /^MAIL_IMAP_(.+)_HOST$/;
 
   // Scan environment variables for IMAP account configurations
@@ -109,13 +117,20 @@ export function validateEnvironment(): string[] {
     if (!accountId) {
       continue;
     }
-    requiredKeys.push({ accountId, prefix: `MAIL_IMAP_${accountId}_` });
+    entries.push({ accountId, prefix: `MAIL_IMAP_${accountId}_` });
   }
 
   // If no accounts are explicitly configured, fall back to the default account
-  if (requiredKeys.length === 0) {
-    requiredKeys.push({ accountId: 'DEFAULT', prefix: 'MAIL_IMAP_DEFAULT_' });
+  if (entries.length === 0) {
+    entries.push({ accountId: 'DEFAULT', prefix: 'MAIL_IMAP_DEFAULT_' });
   }
+
+  return entries;
+}
+
+export function validateEnvironment(): string[] {
+  const errors: string[] = [];
+  const requiredKeys = getAccountEnvEntries();
 
   // Validate that each account has all required fields (HOST, USER, PASS)
   for (const entry of requiredKeys) {
@@ -172,28 +187,31 @@ export function loadAccountConfig(accountId: string): AccountConfig | null {
     return null;
   }
 
-  const port = parseNumberEnv(process.env[`${prefix}PORT`], 993);
-  const secure = parseBooleanEnv(process.env[`${prefix}SECURE`], true);
+  const port = parseNumberEnv(process.env[`${prefix}PORT`], DEFAULT_PORT);
+  const secure = parseBooleanEnv(process.env[`${prefix}SECURE`], DEFAULT_SECURE);
 
   return { host, port, secure, user, pass };
 }
 
 /** Whether write operations (move, delete, flag updates) are enabled for this server instance */
-export const WRITE_ENABLED = parseBooleanEnv(process.env['MAIL_IMAP_WRITE_ENABLED'], false);
+export const WRITE_ENABLED = parseBooleanEnv(
+  process.env['MAIL_IMAP_WRITE_ENABLED'],
+  DEFAULT_WRITE_ENABLED,
+);
 /** Maximum time in milliseconds to wait for an IMAP connection to be established */
 export const CONNECT_TIMEOUT_MS = parseNumberEnv(
   process.env['MAIL_IMAP_CONNECT_TIMEOUT_MS'],
-  30_000,
+  DEFAULT_CONNECT_TIMEOUT_MS,
 );
 /** Maximum time in milliseconds to wait for the IMAP server greeting message */
 export const GREETING_TIMEOUT_MS = parseNumberEnv(
   process.env['MAIL_IMAP_GREETING_TIMEOUT_MS'],
-  15_000,
+  DEFAULT_GREETING_TIMEOUT_MS,
 );
 /** Maximum time in milliseconds to wait for activity on the IMAP socket before timing out */
 export const SOCKET_TIMEOUT_MS = parseNumberEnv(
   process.env['MAIL_IMAP_SOCKET_TIMEOUT_MS'],
-  300_000,
+  DEFAULT_SOCKET_TIMEOUT_MS,
 );
 
 export type { AccountConfig };
