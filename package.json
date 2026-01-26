@@ -1,7 +1,30 @@
 {
   "name": "@bradsjm/mail-imap-mcp",
   "version": "0.1.0",
+  "description": "A TypeScript MCP (stdio) server that provides secure, outcome-oriented tools for searching, reading, and modifying email over IMAP.",
   "license": "MIT",
+  "author": "jb@nrgup.net",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bradsjm/mail-imap-mcp.git"
+  },
+  "homepage": "https://github.com/bradsjm/mail-imap-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/bradsjm/mail-imap-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "imap",
+    "email",
+    "mail",
+    "agent",
+    "stdio"
+  ],
+  "engines": {
+    "node": ">=20.16.0 <21 || >=22.3.0"
+  },
+  "packageManager": "pnpm@10.28.1",
   "type": "module",
   "files": [
     "dist"
