@@ -2,12 +2,12 @@
 
 ## Overview
 
-This document describes the implementation of PDF text extraction functionality for the `mail_imap_get_message` tool in the mail-imap-mcp server. The feature allows users to extract text content from PDF attachments directly within the MCP server, eliminating the need to download and process PDFs separately.
+This document describes the implementation of PDF text extraction functionality for the `imap_get_message` tool in the mail-imap-mcp server. The feature allows users to extract text content from PDF attachments directly within the MCP server, eliminating the need to download and process PDFs separately.
 
 ## Feature Summary
 
 - **Library Used**: `pdf-parse` (v2.4.5) - Pure TypeScript PDF parsing library
-- **Integration Point**: `mail_imap_get_message` tool
+- **Integration Point**: `imap_get_message` tool
 - **Default Behavior**: Disabled (opt-in via `extract_attachment_text` parameter)
 - **Size Limits**: PDFs up to 5MB, extracted text up to 50KB per attachment
 - **Error Handling**: Graceful degradation - extraction failures don't fail the entire request
@@ -341,7 +341,7 @@ describe('PDF extraction validation', () => {
 
 Updated `src/__snapshots__/index.test.ts.snap` to reflect:
 
-- New parameters in `mail_imap_get_message` schema
+- New parameters in `imap_get_message` schema
 - Updated tool description
 - Property ordering (alphabetical per Zod)
 
@@ -412,7 +412,7 @@ Updated `src/__snapshots__/index.test.ts.snap` to reflect:
 ```typescript
 // Extract text from PDFs with default 10KB limit
 {
-  "tool": "mail_imap_get_message",
+  "tool": "imap_get_message",
   "arguments": {
     "account_id": "default",
     "message_id": "imap:default:INBOX:1234567890:42",
@@ -426,7 +426,7 @@ Updated `src/__snapshots__/index.test.ts.snap` to reflect:
 ```typescript
 // Extract up to 5KB per PDF
 {
-  "tool": "mail_imap_get_message",
+  "tool": "imap_get_message",
   "arguments": {
     "account_id": "default",
     "message_id": "imap:default:INBOX:1234567890:42",
@@ -441,7 +441,7 @@ Updated `src/__snapshots__/index.test.ts.snap` to reflect:
 ```typescript
 // Extract up to 50KB per PDF
 {
-  "tool": "mail_imap_get_message",
+  "tool": "imap_get_message",
   "arguments": {
     "account_id": "default",
     "message_id": "imap:default:INBOX:1234567890:42",

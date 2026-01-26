@@ -7,7 +7,7 @@ import { decodeMessageIdOrError } from '../utils/message_id.js';
 import { openMailboxLock } from '../utils/mailbox.js';
 
 /**
- * Handle the mail_imap_delete_message tool call.
+ * Handle the imap_delete_message tool call.
  *
  * Permanently deletes a specific message from an IMAP mailbox. This operation
  * is destructive and requires explicit confirmation via the confirm=true
@@ -67,7 +67,7 @@ export async function handleDeleteMessage(
     // was recreated or otherwise modified
     const lockResult = await openMailboxLock(client, decoded.mailbox, {
       readOnly: false,
-      description: 'mail_imap_delete_message',
+      description: 'imap_delete_message',
       expectedUidvalidity: decoded.uidvalidity,
     });
     if ('error' in lockResult) {
@@ -90,7 +90,7 @@ export async function handleDeleteMessage(
       // the impact of the deletion and decide on next actions
       const hints: ToolHint[] = [
         {
-          tool: 'mail_imap_search_messages',
+          tool: 'imap_search_messages',
           arguments: {
             account_id: args.account_id,
             mailbox: decoded.mailbox,

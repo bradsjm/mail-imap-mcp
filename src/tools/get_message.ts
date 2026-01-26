@@ -25,7 +25,7 @@ import { decodeMessageIdOrError } from '../utils/message_id.js';
 import { openMailboxLock } from '../utils/mailbox.js';
 
 /**
- * Handle the mail_imap_get_message tool call.
+ * Handle the imap_get_message tool call.
  *
  * Retrieves a single email message by its stable identifier and returns
  * parsed headers, body text (and optionally HTML), and attachment summaries.
@@ -99,7 +99,7 @@ export async function handleGetMessage(
     // was recreated or otherwise modified
     const lockResult = await openMailboxLock(client, decoded.mailbox, {
       readOnly: true,
-      description: 'mail_imap_get_message',
+      description: 'imap_get_message',
       expectedUidvalidity: decoded.uidvalidity,
     });
     if ('error' in lockResult) {
@@ -200,7 +200,7 @@ export async function handleGetMessage(
       // Provide actionable hints to guide the user's next steps
       const hints: ToolHint[] = [];
       hints.push({
-        tool: 'mail_imap_search_messages',
+        tool: 'imap_search_messages',
         arguments: {
           account_id: args.account_id,
           mailbox: decoded.mailbox,

@@ -9,7 +9,7 @@ describe('CursorStore', () => {
   it('creates and updates search cursors', () => {
     const store = new CursorStore({ ttl_ms: 60_000, max_entries: 5 });
     const cursor = store.createSearchCursor({
-      tool: 'mail_imap_search_messages',
+      tool: 'imap_search_messages',
       account_id: 'default',
       mailbox: 'INBOX',
       uidvalidity: 1,
@@ -29,7 +29,7 @@ describe('CursorStore', () => {
     vi.useFakeTimers();
     const store = new CursorStore({ ttl_ms: 1000, max_entries: 5 });
     const cursor = store.createSearchCursor({
-      tool: 'mail_imap_search_messages',
+      tool: 'imap_search_messages',
       account_id: 'default',
       mailbox: 'INBOX',
       uidvalidity: 1,
@@ -51,7 +51,7 @@ describe('CursorStore', () => {
 
     vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
     const first = store.createSearchCursor({
-      tool: 'mail_imap_search_messages',
+      tool: 'imap_search_messages',
       account_id: 'default',
       mailbox: 'INBOX',
       uidvalidity: 1,
@@ -64,7 +64,7 @@ describe('CursorStore', () => {
 
     vi.setSystemTime(new Date('2024-01-01T00:00:01Z'));
     store.createSearchCursor({
-      tool: 'mail_imap_search_messages',
+      tool: 'imap_search_messages',
       account_id: 'default',
       mailbox: 'INBOX',
       uidvalidity: 1,
@@ -77,7 +77,7 @@ describe('CursorStore', () => {
 
     vi.setSystemTime(new Date('2024-01-01T00:00:02Z'));
     store.createSearchCursor({
-      tool: 'mail_imap_search_messages',
+      tool: 'imap_search_messages',
       account_id: 'default',
       mailbox: 'INBOX',
       uidvalidity: 1,

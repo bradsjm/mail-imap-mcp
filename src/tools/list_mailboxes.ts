@@ -6,7 +6,7 @@ import { withImapClient } from './runtime.js';
 import { loadAccountOrError } from '../utils/account.js';
 
 /**
- * Handle the mail_imap_list_mailboxes tool call.
+ * Handle the imap_list_mailboxes tool call.
  *
  * Lists all available mailboxes for a configured IMAP account. This tool is
  * useful for discovering valid mailbox names (e.g., INBOX, Sent, Drafts) that
@@ -75,7 +75,7 @@ export async function handleListMailboxes(
   // This helps users quickly see what's available without additional tool calls
   if (firstMailbox) {
     hints.push({
-      tool: 'mail_imap_search_messages',
+      tool: 'imap_search_messages',
       arguments: {
         account_id: args.account_id,
         mailbox: firstMailbox,

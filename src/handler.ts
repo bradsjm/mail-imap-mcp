@@ -32,13 +32,13 @@ import { scrubSecrets } from './logging.js';
 import { getAvailableTools } from './utils/tools.js';
 
 const TOOL_INPUT_SCHEMAS: Readonly<Record<ToolName, z.ZodTypeAny>> = {
-  mail_imap_list_mailboxes: ListMailboxesInputSchema,
-  mail_imap_search_messages: SearchMessagesInputSchema,
-  mail_imap_get_message: GetMessageInputSchema,
-  mail_imap_get_message_raw: GetMessageRawInputSchema,
-  mail_imap_update_message_flags: UpdateMessageFlagsInputSchema,
-  mail_imap_move_message: MoveMessageInputSchema,
-  mail_imap_delete_message: DeleteMessageInputSchema,
+  imap_list_mailboxes: ListMailboxesInputSchema,
+  imap_search_messages: SearchMessagesInputSchema,
+  imap_get_message: GetMessageInputSchema,
+  imap_get_message_raw: GetMessageRawInputSchema,
+  imap_update_message_flags: UpdateMessageFlagsInputSchema,
+  imap_move_message: MoveMessageInputSchema,
+  imap_delete_message: DeleteMessageInputSchema,
 };
 
 /**
@@ -107,19 +107,19 @@ export async function handleToolCall(toolName: ToolName, rawArgs: unknown): Prom
     }
 
     switch (toolName) {
-      case 'mail_imap_list_mailboxes':
+      case 'imap_list_mailboxes':
         return await handleListMailboxes(ListMailboxesInputSchema.parse(rawArgs));
-      case 'mail_imap_search_messages':
+      case 'imap_search_messages':
         return await handleSearchMessages(SearchMessagesInputSchema.parse(rawArgs));
-      case 'mail_imap_get_message':
+      case 'imap_get_message':
         return await handleGetMessage(GetMessageInputSchema.parse(rawArgs));
-      case 'mail_imap_update_message_flags':
+      case 'imap_update_message_flags':
         return await handleUpdateMessageFlags(UpdateMessageFlagsInputSchema.parse(rawArgs));
-      case 'mail_imap_move_message':
+      case 'imap_move_message':
         return await handleMoveMessage(MoveMessageInputSchema.parse(rawArgs));
-      case 'mail_imap_delete_message':
+      case 'imap_delete_message':
         return await handleDeleteMessage(DeleteMessageInputSchema.parse(rawArgs));
-      case 'mail_imap_get_message_raw':
+      case 'imap_get_message_raw':
         return await handleGetMessageRaw(GetMessageRawInputSchema.parse(rawArgs));
       default:
         // This should never happen if TOOL_DEFINITIONS is kept in sync with handlers

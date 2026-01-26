@@ -15,7 +15,7 @@ import { decodeMessageIdOrError } from '../utils/message_id.js';
 import { openMailboxLock } from '../utils/mailbox.js';
 
 /**
- * Handle the mail_imap_move_message tool call.
+ * Handle the imap_move_message tool call.
  *
  * Moves a message from one mailbox to another. This operation removes the message
  * from its original mailbox and places it in the destination mailbox. The tool
@@ -76,7 +76,7 @@ export async function handleMoveMessage(
     // was recreated or otherwise modified
     const lockResult = await openMailboxLock(client, decoded.mailbox, {
       readOnly: false,
-      description: 'mail_imap_move_message',
+      description: 'imap_move_message',
       expectedUidvalidity: decoded.uidvalidity,
     });
     if ('error' in lockResult) {
@@ -148,7 +148,7 @@ export async function handleMoveMessage(
       const hints: ToolHint[] = [];
       if (newMessageId) {
         hints.push({
-          tool: 'mail_imap_get_message',
+          tool: 'imap_get_message',
           arguments: {
             account_id: args.account_id,
             message_id: newMessageId,

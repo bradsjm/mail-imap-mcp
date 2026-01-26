@@ -4,7 +4,7 @@ import type { SearchMessagesInputSchema } from '../contracts.js';
 import { encodeMessageId } from '../message-id.js';
 
 /**
- * Handle the mail_imap_search_messages tool call.
+ * Handle the imap_search_messages tool call.
  *
  * Searches for messages in an IMAP mailbox based on various criteria (date range,
  * sender, recipient, subject, text content, read status, etc.). This tool supports
@@ -137,7 +137,7 @@ export async function handleSearchMessages(
     // We don't specify expectedUidvalidity here because page_token handles that check
     const lockResult = await openMailboxLock(client, args.mailbox, {
       readOnly: true,
-      description: 'mail_imap_search_messages',
+      description: 'imap_search_messages',
     });
     if ('error' in lockResult) {
       return makeError(lockResult.error);
@@ -329,7 +329,7 @@ export async function handleSearchMessages(
         } else {
           // Create a new cursor for the first page
           const created = SEARCH_CURSOR_STORE.createSearchCursor({
-            tool: 'mail_imap_search_messages',
+            tool: 'imap_search_messages',
             account_id: args.account_id,
             mailbox: args.mailbox,
             uidvalidity,
@@ -353,7 +353,7 @@ export async function handleSearchMessages(
       const firstMessage = summaries[0];
       if (firstMessage) {
         hints.push({
-          tool: 'mail_imap_get_message',
+          tool: 'imap_get_message',
           arguments: {
             account_id: args.account_id,
             message_id: firstMessage.message_id,
@@ -364,7 +364,7 @@ export async function handleSearchMessages(
       // Suggest fetching the next page if pagination is available
       if (nextToken) {
         hints.push({
-          tool: 'mail_imap_search_messages',
+          tool: 'imap_search_messages',
           arguments: {
             account_id: args.account_id,
             mailbox: args.mailbox,

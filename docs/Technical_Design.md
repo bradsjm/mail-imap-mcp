@@ -64,13 +64,13 @@ Target: 7 tools (read + minimal write), leaving room for future expansion withou
 
 ### 7.1 Tool list (names are stable API)
 
-1. `mail_imap_list_mailboxes`
-2. `mail_imap_search_messages`
-3. `mail_imap_get_message`
-4. `mail_imap_get_message_raw` (optional; gated, size-limited)
-5. `mail_imap_update_message_flags`
-6. `mail_imap_move_message`
-7. `mail_imap_delete_message` (destructive; requires `confirm: true`)
+1. `imap_list_mailboxes`
+2. `imap_search_messages`
+3. `imap_get_message`
+4. `imap_get_message_raw` (optional; gated, size-limited)
+5. `imap_update_message_flags`
+6. `imap_move_message`
+7. `imap_delete_message` (destructive; requires `confirm: true`)
 
 ### 7.2 Common conventions
 
@@ -85,7 +85,7 @@ Target: 7 tools (read + minimal write), leaving room for future expansion withou
 
 ### 7.3 Example schemas (indicative; finalize in Phase 0)
 
-#### `mail_imap_search_messages` (indicative)
+#### `imap_search_messages` (indicative)
 
 Inputs:
 
@@ -103,7 +103,7 @@ Output (text summary):
 - “Found 37 messages in INBOX matching … Showing 10 (page 1). Next page token: …”
 - Bulleted per-message summaries including stable identifiers (`message_id` / `uid`), date, from, subject, and a short snippet.
 
-#### `mail_imap_delete_message` (indicative)
+#### `imap_delete_message` (indicative)
 
 Inputs:
 

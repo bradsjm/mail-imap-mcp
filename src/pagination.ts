@@ -19,8 +19,8 @@ export type UidRange = Readonly<{
 export type SearchCursor = Readonly<{
   /** Unique identifier for this cursor, used for pagination */
   id: string;
-  /** The tool that created this cursor (always 'mail_imap_search_messages') */
-  tool: 'mail_imap_search_messages';
+  /** The tool that created this cursor (always 'imap_search_messages') */
+  tool: 'imap_search_messages';
   /** The IMAP account identifier for this search */
   account_id: string;
   /** The mailbox being searched */

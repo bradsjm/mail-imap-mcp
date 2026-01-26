@@ -1,150 +1,145 @@
 # mail-imap-mcp
 
-TypeScript MCP (stdio) server for IMAP email access with a compact, LLM-optimized tool surface.
+A TypeScript MCP (stdio) server that provides secure, outcome-oriented tools for searching, reading, and modifying email over IMAP. Designed for integration with AI agents and code assistants through the Model Context Protocol.
 
-## Overview
+## Quick Start
 
-This server exposes outcome-oriented tools to search, read, and safely modify mailboxes over IMAP.
-Responses are JSON-encoded text and include:
+The fastest way to run this server is via `npx`:
 
-- `summary`: concise human-readable summary
-- `data`: structured payload aligned to the tool contract
-- `hints`: suggested next tool calls with minimal arguments
-- `_meta`: optional metadata (e.g., `now_utc`, pagination, capabilities)
-
-## Capabilities
-
-### Read
-
-- List mailboxes
-- Search messages with filters and pagination
-- Fetch a message body/headers with size limits
-- Fetch raw RFC822 source (size-limited)
-- Attachment metadata discovery (no bytes by default)
-- PDF text extraction from attachments (optional, size-limited)
-
-### Write (gated)
-
-- Update message flags
-- Move messages (MOVE when supported, otherwise COPY+DELETE)
-- Delete messages (requires confirmation)
-
-## Tools
-
-### `mail_imap_list_mailboxes`
-
-List mailboxes for a configured account.
-
-### `mail_imap_search_messages`
-
-Search messages in a mailbox with filters and pagination.
-
-Inputs include:
-
-- `account_id`, `mailbox`
-- `last_days` (integer, optional; search recent messages without providing explicit dates)
-- `query`, `from`, `to`, `subject`
-- `unread_only`, `start_date`, `end_date` (do not combine with `last_days`)
-- `limit`, `page_token`
-
-### `mail_imap_get_message`
-
-Fetch a single message by `message_id` and return headers + bounded text/HTML snippets.
-
-Inputs include:
-
-- `account_id`, `message_id`
-- `body_max_chars` (default 2000, max 20000)
-- `include_headers` (default true), `include_all_headers` (default false), `include_html` (default false)
-- `extract_attachment_text` (default false) - extract text from PDF attachments
-- `attachment_text_max_chars` (default 10000, max 50000) - max text length per PDF when extraction enabled
-
-When `extract_attachment_text` is true, the server will:
-
-- Download PDF attachments up to 5MB
-- Extract text content using PDF parsing library
-- Include extracted text in the `attachments` array with an `extracted_text` field
-- Truncate to `attachment_text_max_chars` characters per attachment
-- Continue on errors (extraction failures won't fail the entire request)
-
-### `mail_imap_get_message_raw`
-
-Fetch raw RFC822 source (size-limited by `max_bytes`).
-
-### `mail_imap_update_message_flags`
-
-Add or remove flags on a message (write-gated).
-
-### `mail_imap_move_message`
-
-Move a message to another mailbox. Uses MOVE if supported; otherwise COPY+DELETE.
-
-### `mail_imap_delete_message`
-
-Delete a message (write-gated; requires `confirm: true`).
-
-## Message identity
-
-Messages are identified by a stable `message_id`:
-
-```
-imap:{account_id}:{mailbox}:{uidvalidity}:{uid}
+```bash
+npx -y @bradsjm/mail-imap-mcp
 ```
 
-The server validates this format and rejects mismatches.
+Before running, you'll need to configure your IMAP account credentials via environment variables (see Configuration below).
 
-## Pagination
+## Transport & Security
 
-`mail_imap_search_messages` returns an opaque `next_page_token`.
-Tokens are stored in-memory with a short TTL for stability. If a token expires or the mailbox UIDVALIDITY changes, you must re-run the search.
+This server uses **stdio transport only** for security reasons. There is no built-in HTTP transport support. The server communicates through standard input/output, making it ideal for:
+
+- Local development with AI coding assistants
+- Secure integrations where HTTP exposure is undesirable
+- Containerized or sandboxed environments
+
+```
+┌─────────────────┐         stdio         ┌──────────────────────┐
+│  MCP Client     │ ◄───────────────────► │  mail-imap-mcp       │
+│  (AI Agent)     │    JSON-RPC messages  │  (stdio Server)      │
+└─────────────────┘                       └──────────────────────┘
+                                                  │
+                                                  ▼
+                                        ┌──────────────────────┐
+                                        │  IMAP Email Server   │
+                                        │  (Gmail, Outlook,    │
+                                        │   self-hosted, etc.) │
+                                        └──────────────────────┘
+```
 
 ## Configuration
 
-Account configuration is provided via environment variables:
+Configure your IMAP accounts through environment variables. The server loads these directly and does not support configuration files.
 
-This server also loads a local `.env` file (if present) using `dotenv`. Do not commit secrets.
-An example is provided in `.env.sample`.
+### Account Configuration
 
-If you only configure the `default` account, you can omit `account_id` in tool calls; it defaults to `default`.
+| Environment Variable | Required | Default | Description |
+|----------------------|----------|---------|-------------|
+| `MAIL_IMAP_DEFAULT_HOST` | Yes | - | IMAP server hostname (e.g., `imap.gmail.com`) |
+| `MAIL_IMAP_DEFAULT_PORT` | No | `993` | IMAP server port |
+| `MAIL_IMAP_DEFAULT_SECURE` | No | `true` | Use TLS/SSL for connection |
+| `MAIL_IMAP_DEFAULT_USER` | Yes | - | IMAP username or email address |
+| `MAIL_IMAP_DEFAULT_PASS` | Yes | - | IMAP password or app-specific token |
 
-```
-MAIL_IMAP_DEFAULT_HOST
-MAIL_IMAP_DEFAULT_PORT=993
-MAIL_IMAP_DEFAULT_SECURE=true
-MAIL_IMAP_DEFAULT_USER
-MAIL_IMAP_DEFAULT_PASS
-```
+### Multiple Accounts
 
-Multiple accounts are supported by replacing `DEFAULT` with an uppercase account ID:
+You can configure multiple accounts by replacing `DEFAULT` with your account identifier (uppercase):
 
-```
-MAIL_IMAP_WORK_HOST
-MAIL_IMAP_WORK_USER
-MAIL_IMAP_WORK_PASS
-```
+```bash
+# Default account
+MAIL_IMAP_DEFAULT_HOST=imap.gmail.com
+MAIL_IMAP_DEFAULT_USER=john@gmail.com
+MAIL_IMAP_DEFAULT_PASS=app-password-here
 
-### Write operations
-
-Writes are disabled by default. Enable with:
-
-```
-MAIL_IMAP_WRITE_ENABLED=true
+# Work account
+MAIL_IMAP_WORK_HOST=imap.outlook.com
+MAIL_IMAP_WORK_USER=john@company.com
+MAIL_IMAP_WORK_PASS=work-password-here
 ```
 
-### Timeouts
+### Server Settings
 
+| Environment Variable | Required | Default | Description |
+|----------------------|----------|---------|-------------|
+| `MAIL_IMAP_WRITE_ENABLED` | No | `false` | Enable write operations (move, delete, flag updates) |
+| `MAIL_IMAP_CONNECT_TIMEOUT_MS` | No | `30000` | Connection timeout in milliseconds |
+| `MAIL_IMAP_GREETING_TIMEOUT_MS` | No | `15000` | IMAP server greeting timeout in milliseconds |
+| `MAIL_IMAP_SOCKET_TIMEOUT_MS` | No | `300000` | Socket activity timeout in milliseconds |
+
+### Example MCP Client Configuration
+
+```json
+{
+  "command": "npx",
+  "args": ["-y", "@bradsjm/mail-imap-mcp"],
+  "env": {
+    "MAIL_IMAP_DEFAULT_HOST": "imap.gmail.com",
+    "MAIL_IMAP_DEFAULT_USER": "your-email@gmail.com",
+    "MAIL_IMAP_DEFAULT_PASS": "your-app-password"
+  }
+}
 ```
-MAIL_IMAP_CONNECT_TIMEOUT_MS=30000
-MAIL_IMAP_GREETING_TIMEOUT_MS=15000
-MAIL_IMAP_SOCKET_TIMEOUT_MS=300000
+
+## Available Tools
+
+The server provides the following MCP tools:
+
+| Tool Name | Description | Write Access |
+|-----------|-------------|--------------|
+| `imap_list_mailboxes` | List available mailboxes for an account | No |
+| `imap_search_messages` | Search messages with filters and pagination | No |
+| `imap_get_message` | Fetch message headers and body text | No |
+| `imap_get_message_raw` | Fetch raw RFC822 message source | No |
+| `imap_update_message_flags` | Update message flags (read/unread, etc.) | Yes |
+| `imap_move_message` | Move message to another mailbox | Yes |
+| `imap_delete_message` | Delete a message (requires confirmation) | Yes |
+
+### Tool Details
+
+#### `imap_list_mailboxes`
+
+Discovers available mailboxes (folders) for an IMAP account.
+
+**Parameters:**
+- `account_id` (optional, default: "default") - Account identifier
+
+**Example Response:**
+```json
+{
+  "summary": "Found 5 mailboxes",
+  "data": {
+    "mailboxes": ["INBOX", "Sent", "Drafts", "Archive", "Spam"]
+  }
+}
 ```
 
-## Response shape (JSON text)
+#### `imap_search_messages`
 
-Many MCP clients expect `content` items to be `type: "text"` (and do not accept a JSON content type).
-This server returns a single `text` content item whose text is a JSON object:
+Searches for messages in a mailbox with flexible filtering and pagination.
 
-```
+**Parameters:**
+- `account_id` (optional, default: "default") - Account identifier
+- `mailbox` (optional, default: "INBOX") - Mailbox to search
+- `query` (optional) - Full-text search query
+- `from` (optional) - Filter by sender
+- `to` (optional) - Filter by recipient
+- `subject` (optional) - Filter by subject line
+- `unread_only` (optional) - Only show unread messages
+- `last_days` (optional) - Search messages from last N days
+- `start_date` (optional) - Search from this date (ISO 8601)
+- `end_date` (optional) - Search until this date (ISO 8601)
+- `limit` (optional, default: 10) - Maximum results per page
+- `page_token` (optional) - Pagination token from previous search
+
+**Example Response:**
+```json
 {
   "summary": "Found 37 messages in INBOX. Showing 10 starting at 1.",
   "data": {
@@ -154,9 +149,6 @@ This server returns a single `text` content item whose text is a JSON object:
     "messages": [
       {
         "message_id": "imap:default:INBOX:123:456",
-        "mailbox": "INBOX",
-        "uidvalidity": 123,
-        "uid": 456,
         "date": "2026-01-22T10:01:00.000Z",
         "from": "Alice <alice@example.com>",
         "subject": "Weekly update",
@@ -164,96 +156,180 @@ This server returns a single `text` content item whose text is a JSON object:
       }
     ],
     "next_page_token": "..."
-  },
-  "hints": [
-    {
-      "tool": "mail_imap_get_message",
-      "arguments": { "account_id": "default", "message_id": "imap:default:INBOX:123:456" },
-      "reason": "Fetch full details for the first message."
-    }
-  ],
-  "_meta": { "now_utc": "2026-01-23T12:34:56.789Z", "next_page_token": "..." }
-}
-```
-
-## Usage
-
-### Run locally
-
-```
-pnpm install
-pnpm dev
-```
-
-### Build
-
-```
-pnpm build
-```
-
-## Chat Application Integration (stdio spawn command)
-
-Many MCP-enabled chat applications run stdio servers by spawning a process from an executable command.
-These are common ways to invoke this server:
-
-### Option 1: Run via npx (published package)
-
-- `command`: `npx`
-- `args`: `-y @bradsjm/mail-imap-mcp`
-
-### Option 2: Run from this repo (dev, no build)
-
-- `command`: `pnpm`
-- `args`: `mail-imap-mcp dev`
-
-### Option 3: Run from this repo (built)
-
-1. Build once:
-
-   ```
-   pnpm mail-imap-mcp build
-   ```
-
-2. Spawn:
-
-- `command`: `node`
-- `args`: `mail-imap-mcp/dist/index.js`
-
-### Option 4: Install globally (true executable)
-
-1. Install:
-
-   ```
-   pnpm -g add mail-imap-mcp
-   ```
-
-2. Spawn:
-
-- `command`: `mail-imap-mcp`
-
-### Example MCP server config
-
-Exact configuration keys vary by chat application, but the shape usually looks like:
-
-```json
-{
-  "command": "node",
-  "args": ["mail-imap-mcp/dist/index.js"],
-  "env": {
-    "MAIL_IMAP_DEFAULT_HOST": "imap.example.com",
-    "MAIL_IMAP_DEFAULT_USER": "me@example.com",
-    "MAIL_IMAP_DEFAULT_PASS": "app-password-or-token"
   }
 }
 ```
 
-## Notes
+#### `imap_get_message`
 
-- HTML content is sanitized before returning.
-- Raw message retrieval is size-limited.
-- Move uses MOVE if supported; otherwise COPY+DELETE.
-- Audit logs scrub secret-like fields from arguments.
-- PDF text extraction is resource-intensive and may increase response time significantly.
-- PDF extraction only processes attachments up to 5MB in size; larger PDFs are skipped.
-- PDF extraction failures are logged but don't fail the entire message retrieval request.
-- Use `extract_attachment_text` selectively when you actually need PDF content.
+Retrieves a single message with headers and bounded text content. Optionally extracts text from PDF attachments.
+
+**Parameters:**
+- `account_id` (optional, default: "default") - Account identifier
+- `message_id` (required) - Stable message identifier
+- `body_max_chars` (optional, default: 2000, max: 20000) - Maximum characters for message body
+- `include_headers` (optional, default: true) - Include common headers
+- `include_all_headers` (optional, default: false) - Include all headers
+- `include_html` (optional, default: false) - Include HTML content (sanitized)
+- `extract_attachment_text` (optional, default: false) - Extract text from PDFs
+- `attachment_text_max_chars` (optional, default: 10000, max: 50000) - Max chars per PDF
+
+**PDF Extraction Notes:**
+- Only processes PDFs up to 5MB
+- Extraction failures are logged but don't fail the request
+- Can significantly increase response time
+
+#### `imap_get_message_raw`
+
+Fetches the raw RFC822 message source. Size-limited for security.
+
+**Parameters:**
+- `account_id` (optional, default: "default") - Account identifier
+- `message_id` (required) - Stable message identifier
+- `max_bytes` (optional, default: 1048576) - Maximum bytes to return
+
+#### `imap_update_message_flags`
+
+Adds or removes flags on a message (e.g., mark as read/unread). Requires `MAIL_IMAP_WRITE_ENABLED=true`.
+
+**Parameters:**
+- `account_id` (optional, default: "default") - Account identifier
+- `message_id` (required) - Stable message identifier
+- `add_flags` (optional) - Flags to add (e.g., `["\\Seen"]`)
+- `remove_flags` (optional) - Flags to remove
+
+#### `imap_move_message`
+
+Moves a message to another mailbox. Uses IMAP MOVE if supported, otherwise COPY+DELETE. Requires `MAIL_IMAP_WRITE_ENABLED=true`.
+
+**Parameters:**
+- `account_id` (optional, default: "default") - Account identifier
+- `message_id` (required) - Stable message identifier
+- `target_mailbox` (required) - Destination mailbox name
+
+#### `imap_delete_message`
+
+Deletes a message permanently. Requires explicit confirmation and `MAIL_IMAP_WRITE_ENABLED=true`.
+
+**Parameters:**
+- `account_id` (optional, default: "default") - Account identifier
+- `message_id` (required) - Stable message identifier
+- `confirm` (required) - Must be `true` to proceed
+
+## Message Identity
+
+Messages are identified by a stable, self-describing identifier format:
+
+```
+imap:{account_id}:{mailbox}:{uidvalidity}:{uid}
+```
+
+**Example:**
+```
+imap:default:INBOX:123456789:98765
+```
+
+**Breakdown:**
+```
+┌─── Protocol ───┬──── Account ────┬── Mailbox ───┬─ UIDVALIDITY ─┬─ UID ─┐
+|     imap:      |     default:    |    INBOX:    |   123456789:  | 98765 |
+└────────────────┴─────────────────┴──────────────┴───────────────┴───────┘
+```
+
+The server validates this format and rejects mismatches. The `uidvalidity` and `uid` components ensure stable references even after mailbox changes.
+
+## Response Format
+
+All tool responses follow a consistent JSON structure:
+
+```json
+{
+  "summary": "Concise human-readable summary of what happened",
+  "data": {
+    // Structured result data (tool-specific)
+  },
+  "hints": [
+    {
+      "tool": "imap_get_message",
+      "arguments": { "message_id": "imap:default:INBOX:123:456" },
+      "reason": "Fetch full details for this message"
+    }
+  ],
+  "_meta": {
+    "now_utc": "2026-01-23T12:34:56.789Z",
+    "operation_duration_ms": 234
+  }
+}
+```
+
+- `summary`: Brief description for human readers
+- `data`: Tool-specific result data
+- `hints`: Suggested next tool calls with pre-populated arguments
+- `_meta`: Metadata about the operation (timing, etc.)
+
+## Pagination
+
+The `imap_search_messages` tool supports pagination through an opaque `next_page_token`:
+
+```
+┌──────────────┐
+│ First Search │
+│ (no token)   │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│   Page 1     │
+│ + next_token │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│   Page 2     │
+│ + next_token │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│   Page 3     │
+│ (no token)   │  ← Last page
+└──────────────┘
+```
+
+Tokens are stored in-memory with a short TTL. If a token expires or the mailbox UIDVALIDITY changes, you must re-run the search.
+
+## Development
+
+For local development:
+
+```bash
+# Install dependencies
+pnpm install
+
+# Run in development mode
+pnpm dev
+
+# Build for production
+pnpm build
+
+# Run full checks (format, lint, typecheck, tests)
+pnpm check
+
+# Run tests only
+pnpm test
+```
+
+The project uses TypeScript with strict mode, Vitest for testing, Prettier for formatting, and ESLint for linting.
+
+## Security Notes
+
+- **No HTTP transport**: This server intentionally does not include HTTP transport support for security reasons
+- **Credential management**: Never commit credentials or `.env` files. Use environment variables or secret management systems
+- **Write operations**: Disabled by default; explicitly enable with `MAIL_IMAP_WRITE_ENABLED=true`
+- **Size limits**: All data retrieval operations have size limits to prevent memory issues
+- **Secret logging**: Audit logs automatically scrub secret-like fields from arguments
+- **HTML sanitization**: All HTML content is sanitized before being returned
+
+## License
+
+MIT

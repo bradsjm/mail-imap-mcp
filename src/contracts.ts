@@ -9,13 +9,13 @@ import { MessageIdSchema } from './message-id.js';
  * tool calls to their respective handlers.
  */
 export type ToolName =
-  | 'mail_imap_list_mailboxes'
-  | 'mail_imap_search_messages'
-  | 'mail_imap_get_message'
-  | 'mail_imap_get_message_raw'
-  | 'mail_imap_update_message_flags'
-  | 'mail_imap_move_message'
-  | 'mail_imap_delete_message';
+  | 'imap_list_mailboxes'
+  | 'imap_search_messages'
+  | 'imap_get_message'
+  | 'imap_get_message_raw'
+  | 'imap_update_message_flags'
+  | 'imap_move_message'
+  | 'imap_delete_message';
 
 /**
  * Definition of an IMAP tool including name, description, and schemas.
@@ -154,7 +154,7 @@ const PageTokenSchema = z
 const FlagSchema = z.string().min(1).max(64).describe('IMAP system or user flag (e.g., \\Seen).');
 
 /**
- * Input schema for the mail_imap_list_mailboxes tool.
+ * Input schema for the imap_list_mailboxes tool.
  *
  * Lists all available mailboxes for a configured IMAP account.
  * This is a read-only operation that discovers mailbox names.
@@ -166,7 +166,7 @@ export const ListMailboxesInputSchema = z
   .strict();
 
 /**
- * Input schema for the mail_imap_search_messages tool.
+ * Input schema for the imap_search_messages tool.
  *
  * Searches for messages in an IMAP mailbox based on various criteria.
  * Supports date ranges, sender/recipient/subject filters, full-text search,
@@ -252,7 +252,7 @@ export const SearchMessagesInputSchema = z
   });
 
 /**
- * Input schema for the mail_imap_get_message tool.
+ * Input schema for the imap_get_message tool.
  *
  * Retrieves a single email message by its stable identifier and returns
  * parsed headers, body text (and optionally HTML), and attachment summaries.
@@ -310,7 +310,7 @@ export const GetMessageInputSchema = z
   });
 
 /**
- * Input schema for the mail_imap_get_message_raw tool.
+ * Input schema for the imap_get_message_raw tool.
  *
  * Retrieves the raw RFC822 source of an email message. This is the complete,
  * unparsed message as received from the mail server. The max_bytes parameter
@@ -331,7 +331,7 @@ export const GetMessageRawInputSchema = z
   .strict();
 
 /**
- * Input schema for the mail_imap_update_message_flags tool.
+ * Input schema for the imap_update_message_flags tool.
  *
  * Updates IMAP message flags (also known as labels or tags). Flags can be
  * added or removed. At least one of add_flags or remove_flags must be provided.
@@ -368,7 +368,7 @@ export const UpdateMessageFlagsInputSchema = z
   });
 
 /**
- * Input schema for the mail_imap_move_message tool.
+ * Input schema for the imap_move_message tool.
  *
  * Moves a message from one mailbox to another. This operation removes the
  * message from its original mailbox and places it in the destination mailbox.
@@ -383,7 +383,7 @@ export const MoveMessageInputSchema = z
   .strict();
 
 /**
- * Input schema for the mail_imap_delete_message tool.
+ * Input schema for the imap_delete_message tool.
  *
  * Permanently deletes a specific message from an IMAP mailbox. This is a
  * destructive operation that requires explicit confirmation via the confirm=true
@@ -594,59 +594,59 @@ export const DeleteMessageResultSchema = z
  *   MAIL_IMAP_WRITE_ENABLED=true
  *
  * Tool purposes:
- * - mail_imap_list_mailboxes: Discover available mailboxes
- * - mail_imap_search_messages: Find messages matching criteria
- * - mail_imap_get_message: Retrieve parsed message content
- * - mail_imap_get_message_raw: Retrieve raw RFC822 source
- * - mail_imap_update_message_flags: Modify message flags/labels
- * - mail_imap_move_message: Move message to another mailbox
- * - mail_imap_delete_message: Permanently delete a message
+ * - imap_list_mailboxes: Discover available mailboxes
+ * - imap_search_messages: Find messages matching criteria
+ * - imap_get_message: Retrieve parsed message content
+ * - imap_get_message_raw: Retrieve raw RFC822 source
+ * - imap_update_message_flags: Modify message flags/labels
+ * - imap_move_message: Move message to another mailbox
+ * - imap_delete_message: Permanently delete a message
  */
 export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   {
-    name: 'mail_imap_list_mailboxes',
+    name: 'imap_list_mailboxes',
     description:
       "List mailboxes for an IMAP account. Use this to discover valid mailbox names (e.g., INBOX). If account_id is omitted, defaults to 'default'. Returns a concise list.",
     inputSchema: ListMailboxesInputSchema,
     outputSchema: ListMailboxesResultSchema,
   },
   {
-    name: 'mail_imap_search_messages',
+    name: 'imap_search_messages',
     description:
       "List or search messages in a mailbox by sender/subject/date/unread. If account_id is omitted, defaults to 'default'. Returns paginated summaries (token-efficient).",
     inputSchema: SearchMessagesInputSchema,
     outputSchema: SearchMessagesResultSchema,
   },
   {
-    name: 'mail_imap_get_message',
+    name: 'imap_get_message',
     description:
       "Fetch a single message by stable identifier and return headers + a bounded text snippet (optionally sanitized HTML). Can extract text from PDF attachments. If account_id is omitted, defaults to 'default'.",
     inputSchema: GetMessageInputSchema,
     outputSchema: GetMessageResultSchema,
   },
   {
-    name: 'mail_imap_get_message_raw',
+    name: 'imap_get_message_raw',
     description:
       "Fetch raw message source (RFC822) for a single message. If account_id is omitted, defaults to 'default'. Gated and size-limited; not returned by default.",
     inputSchema: GetMessageRawInputSchema,
     outputSchema: GetMessageRawResultSchema,
   },
   {
-    name: 'mail_imap_update_message_flags',
+    name: 'imap_update_message_flags',
     description:
       "Update flags on a message (e.g., mark read/unread). If account_id is omitted, defaults to 'default'. Write operations are disabled by default.",
     inputSchema: UpdateMessageFlagsInputSchema,
     outputSchema: UpdateMessageFlagsResultSchema,
   },
   {
-    name: 'mail_imap_move_message',
+    name: 'imap_move_message',
     description:
       "Move a message to another mailbox. If account_id is omitted, defaults to 'default'. Write operations are disabled by default.",
     inputSchema: MoveMessageInputSchema,
     outputSchema: MoveMessageResultSchema,
   },
   {
-    name: 'mail_imap_delete_message',
+    name: 'imap_delete_message',
     description:
       "Delete a message. If account_id is omitted, defaults to 'default'. Requires explicit confirmation; write operations are disabled by default.",
     inputSchema: DeleteMessageInputSchema,

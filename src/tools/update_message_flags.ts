@@ -7,7 +7,7 @@ import { decodeMessageIdOrError } from '../utils/message_id.js';
 import { openMailboxLock } from '../utils/mailbox.js';
 
 /**
- * Handle the mail_imap_update_message_flags tool call.
+ * Handle the imap_update_message_flags tool call.
  *
  * Updates IMAP message flags (also known as labels or tags) on a specific message.
  * Common flags include \Seen (read/unread), \Flagged, \Answered, \Deleted, and user-defined
@@ -68,7 +68,7 @@ export async function handleUpdateMessageFlags(
     // was recreated or otherwise modified
     const lockResult = await openMailboxLock(client, decoded.mailbox, {
       readOnly: false,
-      description: 'mail_imap_update_message_flags',
+      description: 'imap_update_message_flags',
       expectedUidvalidity: decoded.uidvalidity,
     });
     if ('error' in lockResult) {
@@ -108,7 +108,7 @@ export async function handleUpdateMessageFlags(
       // This helps users verify the update and understand the message's current state
       const hints: ToolHint[] = [
         {
-          tool: 'mail_imap_get_message',
+          tool: 'imap_get_message',
           arguments: {
             account_id: args.account_id,
             message_id: args.message_id,

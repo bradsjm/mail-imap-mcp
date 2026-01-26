@@ -15,7 +15,7 @@ import { decodeMessageIdOrError } from '../utils/message_id.js';
 import { openMailboxLock } from '../utils/mailbox.js';
 
 /**
- * Handle the mail_imap_get_message_raw tool call.
+ * Handle the imap_get_message_raw tool call.
  *
  * Retrieves the raw RFC822 source of an email message. This is the complete,
  * unparsed message as received from the mail server, including all headers,
@@ -79,7 +79,7 @@ export async function handleGetMessageRaw(
     // was recreated or otherwise modified
     const lockResult = await openMailboxLock(client, decoded.mailbox, {
       readOnly: true,
-      description: 'mail_imap_get_message_raw',
+      description: 'imap_get_message_raw',
       expectedUidvalidity: decoded.uidvalidity,
     });
     if ('error' in lockResult) {
@@ -122,7 +122,7 @@ export async function handleGetMessageRaw(
       // Raw email content can be difficult to work with and may contain untrusted HTML/scripts
       const hints: ToolHint[] = [
         {
-          tool: 'mail_imap_get_message',
+          tool: 'imap_get_message',
           arguments: {
             account_id: args.account_id,
             message_id: args.message_id,
