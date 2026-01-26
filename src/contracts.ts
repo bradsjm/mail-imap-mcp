@@ -427,6 +427,18 @@ export const AttachmentSummarySchema = z
     size_bytes: z.number().int().nonnegative(),
     part_id: z.string().min(1).max(128),
     extracted_text: z.string().min(1).max(50000).optional(),
+    attachment_uri: z
+      .string()
+      .min(1)
+      .max(2048)
+      .optional()
+      .describe('Optional MCP resource URI for fetching the attachment bytes (imap://...).'),
+    attachment_text_uri: z
+      .string()
+      .min(1)
+      .max(2048)
+      .optional()
+      .describe('Optional MCP resource URI for fetching extracted attachment text (imap://...).'),
   })
   .strict();
 
@@ -440,6 +452,18 @@ export const AttachmentSummarySchema = z
 export const MessageSummarySchema = z
   .object({
     message_id: MessageIdSchema,
+    message_uri: z
+      .string()
+      .min(1)
+      .max(2048)
+      .optional()
+      .describe('Optional MCP resource URI for reading this message as a resource (imap://...).'),
+    message_raw_uri: z
+      .string()
+      .min(1)
+      .max(2048)
+      .optional()
+      .describe('Optional MCP resource URI for reading raw RFC822 content (imap://...).'),
     mailbox: MailboxSchema,
     uidvalidity: z.number().int().nonnegative(),
     uid: z.number().int().nonnegative(),
@@ -461,6 +485,18 @@ export const MessageSummarySchema = z
 export const MessageDetailSchema = z
   .object({
     message_id: MessageIdSchema,
+    message_uri: z
+      .string()
+      .min(1)
+      .max(2048)
+      .optional()
+      .describe('Optional MCP resource URI for reading this message as a resource (imap://...).'),
+    message_raw_uri: z
+      .string()
+      .min(1)
+      .max(2048)
+      .optional()
+      .describe('Optional MCP resource URI for reading raw RFC822 content (imap://...).'),
     mailbox: MailboxSchema,
     uidvalidity: z.number().int().nonnegative(),
     uid: z.number().int().nonnegative(),
@@ -530,6 +566,18 @@ export const GetMessageRawResultSchema = z
   .object({
     account_id: AccountIdSchema,
     message_id: MessageIdSchema,
+    message_uri: z
+      .string()
+      .min(1)
+      .max(2048)
+      .optional()
+      .describe('Optional MCP resource URI for reading the parsed message (imap://...).'),
+    message_raw_uri: z
+      .string()
+      .min(1)
+      .max(2048)
+      .optional()
+      .describe('Optional MCP resource URI for reading raw RFC822 content (imap://...).'),
     size_bytes: z.number().int().nonnegative(),
     raw_source: z.string().min(1).max(1_000_000),
   })

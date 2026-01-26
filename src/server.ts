@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { TOOL_DEFINITIONS, type ToolDefinition } from './contracts.js';
 import { handleToolCall } from './handler.js';
 import { getAvailableTools } from './utils/tools.js';
+import { registerImapResources } from './resources/imap_resources.js';
 
 /**
  * Create and configure an MCP server for IMAP email operations.
@@ -46,6 +47,10 @@ export function createServer(): McpServer {
       async (args) => handleToolCall(tool.name, args),
     );
   }
+
+  // Resources are additive and optional: tool-only clients keep full functionality.
+  // Clients that support MCP resources can attach message/attachment URIs as context.
+  registerImapResources(server);
 
   return server;
 }

@@ -23,6 +23,12 @@ import { parseMailSource } from '../utils/mailparser.js';
 import { loadAccountOrError } from '../utils/account.js';
 import { decodeMessageIdOrError } from '../utils/message_id.js';
 import { openMailboxLock } from '../utils/mailbox.js';
+import {
+  attachmentResourceUri,
+  attachmentTextResourceUri,
+  messageRawResourceUri,
+  messageResourceUri,
+} from '../resources/uri.js';
 
 /**
  * Handle the imap_get_message tool call.
@@ -167,6 +173,8 @@ export async function handleGetMessage(
         size_bytes: number;
         part_id: string;
         extracted_text?: string;
+        attachment_uri?: string;
+        attachment_text_uri?: string;
       }> = [];
       await collectAttachmentSummaries(
         fetched.bodyStructure,
@@ -186,6 +194,17 @@ export async function handleGetMessage(
         uidvalidity,
         uid: decoded.uid,
       });
+      const locator = {
+        account_id: args.account_id,
+        mailbox: decoded.mailbox,
+        uidvalidity,
+        uid: decoded.uid,
+      };
+      for (const attachment of attachments) {
+        const a = { ...locator, part_id: attachment.part_id };
+        attachment.attachment_uri = attachmentResourceUri(a);
+        attachment.attachment_text_uri = attachmentTextResourceUri(a);
+      }
 
       // Build a human-readable summary with the most important message information
       // This gives users a quick overview without needing to parse the full JSON
@@ -217,6 +236,8 @@ export async function handleGetMessage(
           account_id: args.account_id,
           message: {
             message_id: messageId,
+            message_uri: messageResourceUri(locator),
+            message_raw_uri: messageRawResourceUri(locator),
             mailbox: decoded.mailbox,
             uidvalidity,
             uid: decoded.uid,

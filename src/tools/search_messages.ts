@@ -104,6 +104,7 @@ import {
 } from '../pagination.js';
 import { loadAccountOrError } from '../utils/account.js';
 import { openMailboxLock } from '../utils/mailbox.js';
+import { messageRawResourceUri, messageResourceUri } from '../resources/uri.js';
 
 export async function handleSearchMessages(
   args: z.infer<typeof SearchMessagesInputSchema>,
@@ -292,8 +293,16 @@ export async function handleSearchMessages(
             uidvalidity,
             uid,
           });
+          const locator = {
+            account_id: args.account_id,
+            mailbox: args.mailbox,
+            uidvalidity,
+            uid,
+          };
           return {
             message_id: messageId,
+            message_uri: messageResourceUri(locator),
+            message_raw_uri: messageRawResourceUri(locator),
             mailbox: args.mailbox,
             uidvalidity,
             uid,

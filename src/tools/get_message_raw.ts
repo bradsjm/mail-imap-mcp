@@ -13,6 +13,7 @@ import {
 import { loadAccountOrError } from '../utils/account.js';
 import { decodeMessageIdOrError } from '../utils/message_id.js';
 import { openMailboxLock } from '../utils/mailbox.js';
+import { messageRawResourceUri, messageResourceUri } from '../resources/uri.js';
 
 /**
  * Handle the imap_get_message_raw tool call.
@@ -133,11 +134,19 @@ export async function handleGetMessageRaw(
 
       // Return the successful result with structured data, hints, and metadata
       // The metadata includes a security note warning users about untrusted email content
+      const locator = {
+        account_id: args.account_id,
+        mailbox: decoded.mailbox,
+        uidvalidity: decoded.uidvalidity,
+        uid: decoded.uid,
+      };
       return makeOk(
         summary,
         {
           account_id: args.account_id,
           message_id: args.message_id,
+          message_uri: messageResourceUri(locator),
+          message_raw_uri: messageRawResourceUri(locator),
           size_bytes: total,
           raw_source: rawSource,
         },

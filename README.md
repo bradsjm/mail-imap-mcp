@@ -40,13 +40,13 @@ Configure your IMAP accounts through environment variables. The server loads the
 
 ### Account Configuration
 
-| Environment Variable | Required | Default | Description |
-|----------------------|----------|---------|-------------|
-| `MAIL_IMAP_DEFAULT_HOST` | Yes | - | IMAP server hostname (e.g., `imap.gmail.com`) |
-| `MAIL_IMAP_DEFAULT_PORT` | No | `993` | IMAP server port |
-| `MAIL_IMAP_DEFAULT_SECURE` | No | `true` | Use TLS/SSL for connection |
-| `MAIL_IMAP_DEFAULT_USER` | Yes | - | IMAP username or email address |
-| `MAIL_IMAP_DEFAULT_PASS` | Yes | - | IMAP password or app-specific token |
+| Environment Variable       | Required | Default | Description                                   |
+| -------------------------- | -------- | ------- | --------------------------------------------- |
+| `MAIL_IMAP_DEFAULT_HOST`   | Yes      | -       | IMAP server hostname (e.g., `imap.gmail.com`) |
+| `MAIL_IMAP_DEFAULT_PORT`   | No       | `993`   | IMAP server port                              |
+| `MAIL_IMAP_DEFAULT_SECURE` | No       | `true`  | Use TLS/SSL for connection                    |
+| `MAIL_IMAP_DEFAULT_USER`   | Yes      | -       | IMAP username or email address                |
+| `MAIL_IMAP_DEFAULT_PASS`   | Yes      | -       | IMAP password or app-specific token           |
 
 ### Multiple Accounts
 
@@ -66,12 +66,12 @@ MAIL_IMAP_WORK_PASS=work-password-here
 
 ### Server Settings
 
-| Environment Variable | Required | Default | Description |
-|----------------------|----------|---------|-------------|
-| `MAIL_IMAP_WRITE_ENABLED` | No | `false` | Enable write operations (move, delete, flag updates) |
-| `MAIL_IMAP_CONNECT_TIMEOUT_MS` | No | `30000` | Connection timeout in milliseconds |
-| `MAIL_IMAP_GREETING_TIMEOUT_MS` | No | `15000` | IMAP server greeting timeout in milliseconds |
-| `MAIL_IMAP_SOCKET_TIMEOUT_MS` | No | `300000` | Socket activity timeout in milliseconds |
+| Environment Variable            | Required | Default  | Description                                          |
+| ------------------------------- | -------- | -------- | ---------------------------------------------------- |
+| `MAIL_IMAP_WRITE_ENABLED`       | No       | `false`  | Enable write operations (move, delete, flag updates) |
+| `MAIL_IMAP_CONNECT_TIMEOUT_MS`  | No       | `30000`  | Connection timeout in milliseconds                   |
+| `MAIL_IMAP_GREETING_TIMEOUT_MS` | No       | `15000`  | IMAP server greeting timeout in milliseconds         |
+| `MAIL_IMAP_SOCKET_TIMEOUT_MS`   | No       | `300000` | Socket activity timeout in milliseconds              |
 
 ### Example MCP Client Configuration
 
@@ -91,15 +91,32 @@ MAIL_IMAP_WORK_PASS=work-password-here
 
 The server provides the following MCP tools:
 
-| Tool Name | Description | Write Access |
-|-----------|-------------|--------------|
-| `imap_list_mailboxes` | List available mailboxes for an account | No |
-| `imap_search_messages` | Search messages with filters and pagination | No |
-| `imap_get_message` | Fetch message headers and body text | No |
-| `imap_get_message_raw` | Fetch raw RFC822 message source | No |
-| `imap_update_message_flags` | Update message flags (read/unread, etc.) | Yes |
-| `imap_move_message` | Move message to another mailbox | Yes |
-| `imap_delete_message` | Delete a message (requires confirmation) | Yes |
+| Tool Name                   | Description                                 | Write Access |
+| --------------------------- | ------------------------------------------- | ------------ |
+| `imap_list_mailboxes`       | List available mailboxes for an account     | No           |
+| `imap_search_messages`      | Search messages with filters and pagination | No           |
+| `imap_get_message`          | Fetch message headers and body text         | No           |
+| `imap_get_message_raw`      | Fetch raw RFC822 message source             | No           |
+| `imap_update_message_flags` | Update message flags (read/unread, etc.)    | Yes          |
+| `imap_move_message`         | Move message to another mailbox             | Yes          |
+| `imap_delete_message`       | Delete a message (requires confirmation)    | Yes          |
+
+## Resources (Optional)
+
+Some MCP clients can browse/read server-provided Resources (`resources/list`, `resources/read`). This
+server exposes additional read-only resources for messages and attachments. Tool-only clients remain
+fully supported.
+
+Resource URI templates:
+
+- Message (parsed/sanitized): `imap://{account_id}/mailbox/{mailbox}/message/{uidvalidity}/{uid}`
+- Message raw (RFC822, truncated): `imap://{account_id}/mailbox/{mailbox}/message/{uidvalidity}/{uid}/raw`
+- Attachment bytes (base64 blob, size-capped): `imap://{account_id}/mailbox/{mailbox}/message/{uidvalidity}/{uid}/attachment/{part_id}`
+- Attachment text (text/\* + PDF only, bounded): `imap://{account_id}/mailbox/{mailbox}/message/{uidvalidity}/{uid}/attachment/{part_id}/text`
+
+To bridge tools and resources, some tool outputs include optional `message_uri`, `message_raw_uri`,
+`attachment_uri`, and `attachment_text_uri` fields so resource-capable clients can attach the relevant
+resource directly.
 
 ### Tool Details
 
@@ -108,9 +125,11 @@ The server provides the following MCP tools:
 Discovers available mailboxes (folders) for an IMAP account.
 
 **Parameters:**
+
 - `account_id` (optional, default: "default") - Account identifier
 
 **Example Response:**
+
 ```json
 {
   "summary": "Found 5 mailboxes",
@@ -125,6 +144,7 @@ Discovers available mailboxes (folders) for an IMAP account.
 Searches for messages in a mailbox with flexible filtering and pagination.
 
 **Parameters:**
+
 - `account_id` (optional, default: "default") - Account identifier
 - `mailbox` (optional, default: "INBOX") - Mailbox to search
 - `query` (optional) - Full-text search query
@@ -139,6 +159,7 @@ Searches for messages in a mailbox with flexible filtering and pagination.
 - `page_token` (optional) - Pagination token from previous search
 
 **Example Response:**
+
 ```json
 {
   "summary": "Found 37 messages in INBOX. Showing 10 starting at 1.",
@@ -165,6 +186,7 @@ Searches for messages in a mailbox with flexible filtering and pagination.
 Retrieves a single message with headers and bounded text content. Optionally extracts text from PDF attachments.
 
 **Parameters:**
+
 - `account_id` (optional, default: "default") - Account identifier
 - `message_id` (required) - Stable message identifier
 - `body_max_chars` (optional, default: 2000, max: 20000) - Maximum characters for message body
@@ -175,6 +197,7 @@ Retrieves a single message with headers and bounded text content. Optionally ext
 - `attachment_text_max_chars` (optional, default: 10000, max: 50000) - Max chars per PDF
 
 **PDF Extraction Notes:**
+
 - Only processes PDFs up to 5MB
 - Extraction failures are logged but don't fail the request
 - Can significantly increase response time
@@ -184,6 +207,7 @@ Retrieves a single message with headers and bounded text content. Optionally ext
 Fetches the raw RFC822 message source. Size-limited for security.
 
 **Parameters:**
+
 - `account_id` (optional, default: "default") - Account identifier
 - `message_id` (required) - Stable message identifier
 - `max_bytes` (optional, default: 1048576) - Maximum bytes to return
@@ -193,6 +217,7 @@ Fetches the raw RFC822 message source. Size-limited for security.
 Adds or removes flags on a message (e.g., mark as read/unread). Requires `MAIL_IMAP_WRITE_ENABLED=true`.
 
 **Parameters:**
+
 - `account_id` (optional, default: "default") - Account identifier
 - `message_id` (required) - Stable message identifier
 - `add_flags` (optional) - Flags to add (e.g., `["\\Seen"]`)
@@ -203,6 +228,7 @@ Adds or removes flags on a message (e.g., mark as read/unread). Requires `MAIL_I
 Moves a message to another mailbox. Uses IMAP MOVE if supported, otherwise COPY+DELETE. Requires `MAIL_IMAP_WRITE_ENABLED=true`.
 
 **Parameters:**
+
 - `account_id` (optional, default: "default") - Account identifier
 - `message_id` (required) - Stable message identifier
 - `target_mailbox` (required) - Destination mailbox name
@@ -212,6 +238,7 @@ Moves a message to another mailbox. Uses IMAP MOVE if supported, otherwise COPY+
 Deletes a message permanently. Requires explicit confirmation and `MAIL_IMAP_WRITE_ENABLED=true`.
 
 **Parameters:**
+
 - `account_id` (optional, default: "default") - Account identifier
 - `message_id` (required) - Stable message identifier
 - `confirm` (required) - Must be `true` to proceed
@@ -225,11 +252,13 @@ imap:{account_id}:{mailbox}:{uidvalidity}:{uid}
 ```
 
 **Example:**
+
 ```
 imap:default:INBOX:123456789:98765
 ```
 
 **Breakdown:**
+
 ```
 ┌─── Protocol ───┬──── Account ────┬── Mailbox ───┬─ UIDVALIDITY ─┬─ UID ─┐
 |     imap:      |     default:    |    INBOX:    |   123456789:  | 98765 |
