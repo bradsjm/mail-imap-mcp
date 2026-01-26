@@ -188,11 +188,26 @@ export const SearchMessagesInputSchema = z
       .max(365)
       .optional()
       .describe('Search only messages from the last N days (UTC, inclusive).'),
-    query: z.string().min(1).max(256).optional(),
-    from: z.string().min(1).max(256).optional(),
-    to: z.string().min(1).max(256).optional(),
-    subject: z.string().min(1).max(256).optional(),
-    unread_only: z.boolean().optional(),
+    query: z
+      .string()
+      .min(1)
+      .max(256)
+      .optional()
+      .describe('Free-text search across headers and body (server-dependent).'),
+    from: z
+      .string()
+      .min(1)
+      .max(256)
+      .optional()
+      .describe('Filter by sender email or display name substring.'),
+    to: z
+      .string()
+      .min(1)
+      .max(256)
+      .optional()
+      .describe('Filter by recipient email or display name substring.'),
+    subject: z.string().min(1).max(256).optional().describe('Filter by subject substring.'),
+    unread_only: z.boolean().optional().describe('If true, return only unread messages.'),
     start_date: DateSchema.optional(),
     end_date: DateSchema.optional(),
     include_snippet: z
@@ -250,13 +265,25 @@ export const GetMessageInputSchema = z
   .object({
     account_id: DefaultAccountIdSchema,
     message_id: MessageIdSchema,
-    body_max_chars: z.number().int().min(100).max(20000).default(2000),
-    include_headers: z.boolean().default(true),
+    body_max_chars: z
+      .number()
+      .int()
+      .min(100)
+      .max(20000)
+      .default(2000)
+      .describe('Maximum number of body characters to return (100-20000).'),
+    include_headers: z
+      .boolean()
+      .default(true)
+      .describe('If true, include selected headers (From/To/Subject/Date).'),
     include_all_headers: z
       .boolean()
       .default(false)
       .describe('If true, include all headers (may be large/noisy). Implies include_headers.'),
-    include_html: z.boolean().default(false),
+    include_html: z
+      .boolean()
+      .default(false)
+      .describe('If true, include a sanitized HTML body variant when available.'),
     extract_attachment_text: z
       .boolean()
       .default(false)
@@ -293,7 +320,13 @@ export const GetMessageRawInputSchema = z
   .object({
     account_id: DefaultAccountIdSchema,
     message_id: MessageIdSchema,
-    max_bytes: z.number().int().min(1024).max(1_000_000).default(200_000),
+    max_bytes: z
+      .number()
+      .int()
+      .min(1024)
+      .max(1_000_000)
+      .default(200_000)
+      .describe('Maximum raw source bytes to return (1024-1000000).'),
   })
   .strict();
 
@@ -310,8 +343,18 @@ export const UpdateMessageFlagsInputSchema = z
   .object({
     account_id: DefaultAccountIdSchema,
     message_id: MessageIdSchema,
-    add_flags: z.array(FlagSchema).min(1).max(20).optional(),
-    remove_flags: z.array(FlagSchema).min(1).max(20).optional(),
+    add_flags: z
+      .array(FlagSchema)
+      .min(1)
+      .max(20)
+      .optional()
+      .describe('Flags to add to the message (e.g., ["\\\\Seen"]).'),
+    remove_flags: z
+      .array(FlagSchema)
+      .min(1)
+      .max(20)
+      .optional()
+      .describe('Flags to remove from the message (e.g., ["\\\\Flagged"]).'),
   })
   .strict()
   .superRefine((value, ctx) => {
