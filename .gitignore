@@ -1,6 +1,5 @@
 dist/
 node_modules/
-__snapshots__/
 .DS_Store
 *.log
 .env
