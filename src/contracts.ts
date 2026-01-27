@@ -9,13 +9,15 @@ import { MessageIdSchema } from './message-id.js';
  * tool calls to their respective handlers.
  */
 export type ToolName =
+  | 'imap_list_accounts'
   | 'imap_list_mailboxes'
   | 'imap_search_messages'
   | 'imap_get_message'
   | 'imap_get_message_raw'
   | 'imap_update_message_flags'
   | 'imap_move_message'
-  | 'imap_delete_message';
+  | 'imap_delete_message'
+  | 'imap_verify_account';
 
 /**
  * Definition of an IMAP tool including name, description, and schemas.
@@ -60,6 +62,10 @@ const AccountIdSchema = z
 const DefaultAccountIdSchema = AccountIdSchema.default('default').describe(
   "Configured IMAP account identifier. Defaults to 'default' if omitted.",
 );
+
+const HostSchema = z.string().min(1).max(255).describe('IMAP server hostname.');
+const PortSchema = z.number().int().min(1).max(65535).describe('IMAP server port number.');
+const SecureSchema = z.boolean().describe('Whether the IMAP connection uses TLS/SSL.');
 
 /**
  * Schema for validating IMAP mailbox names.
@@ -164,6 +170,13 @@ export const ListMailboxesInputSchema = z
     account_id: DefaultAccountIdSchema,
   })
   .strict();
+
+/**
+ * Input schema for the imap_list_accounts tool.
+ *
+ * Lists configured accounts and their non-secret connection details.
+ */
+export const ListAccountsInputSchema = z.object({}).strict();
 
 /**
  * Input schema for the imap_search_messages tool.
@@ -398,6 +411,35 @@ export const DeleteMessageInputSchema = z
   .strict();
 
 /**
+ * Input schema for the imap_verify_account tool.
+ *
+ * Verifies connectivity and authentication for a configured account.
+ */
+export const VerifyAccountInputSchema = z
+  .object({
+    account_id: DefaultAccountIdSchema,
+  })
+  .strict();
+
+/**
+ * Output schema for non-secret IMAP server connection details.
+ */
+export const ServerConnectionSchema = z
+  .object({
+    host: HostSchema,
+    port: PortSchema,
+    secure: SecureSchema,
+  })
+  .strict();
+
+/**
+ * Output schema for an account summary with connection details.
+ */
+export const AccountConnectionSchema = ServerConnectionSchema.extend({
+  account_id: AccountIdSchema,
+}).strict();
+
+/**
  * Output schema for a mailbox summary.
  *
  * Contains basic information about a mailbox, including its name,
@@ -630,6 +672,28 @@ export const DeleteMessageResultSchema = z
   .strict();
 
 /**
+ * Output schema for the list_accounts tool.
+ */
+export const ListAccountsResultSchema = z
+  .object({
+    accounts: z.array(AccountConnectionSchema).max(50),
+  })
+  .strict();
+
+/**
+ * Output schema for the verify_account tool.
+ */
+export const VerifyAccountResultSchema = z
+  .object({
+    account_id: AccountIdSchema,
+    ok: z.literal(true),
+    latency_ms: z.number().int().nonnegative(),
+    server: ServerConnectionSchema,
+    capabilities: z.array(z.string().min(1).max(128)).max(256),
+  })
+  .strict();
+
+/**
  * Complete list of all available IMAP tool definitions.
  *
  * This readonly array contains the definitions for all tools supported by
@@ -651,6 +715,13 @@ export const DeleteMessageResultSchema = z
  * - imap_delete_message: Permanently delete a message
  */
 export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
+  {
+    name: 'imap_list_accounts',
+    description:
+      'List configured IMAP accounts and their non-secret connection details (host, port, secure).',
+    inputSchema: ListAccountsInputSchema,
+    outputSchema: ListAccountsResultSchema,
+  },
   {
     name: 'imap_list_mailboxes',
     description:
@@ -699,5 +770,12 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       "Delete a message. If account_id is omitted, defaults to 'default'. Requires explicit confirmation; write operations are disabled by default.",
     inputSchema: DeleteMessageInputSchema,
     outputSchema: DeleteMessageResultSchema,
+  },
+  {
+    name: 'imap_verify_account',
+    description:
+      "Verify IMAP connectivity and authentication for an account, and return server capabilities. If account_id is omitted, defaults to 'default'.",
+    inputSchema: VerifyAccountInputSchema,
+    outputSchema: VerifyAccountResultSchema,
   },
 ] as const;

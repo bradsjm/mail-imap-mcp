@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   DeleteMessageInputSchema,
   GetMessageInputSchema,
+  ListAccountsInputSchema,
   ListMailboxesInputSchema,
   SearchMessagesInputSchema,
   UpdateMessageFlagsInputSchema,
+  VerifyAccountInputSchema,
 } from '../src/contracts.js';
 import { MessageIdSchema } from '../src/message-id.js';
 import { getHelpText } from '../src/help.js';
@@ -35,6 +37,11 @@ describe('tool contracts', () => {
 
   it('validates list mailboxes input', () => {
     const result = ListMailboxesInputSchema.safeParse({ account_id: 'default' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts empty list accounts input', () => {
+    const result = ListAccountsInputSchema.safeParse({});
     expect(result.success).toBe(true);
   });
 
@@ -88,6 +95,14 @@ describe('tool contracts', () => {
       message_id: 'imap:default:INBOX:1:2',
     });
     expect(result.success).toBe(false);
+  });
+
+  it('defaults verify account id to default', () => {
+    const result = VerifyAccountInputSchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.account_id).toBe('default');
+    }
   });
 
   it('rejects malformed message_id', () => {

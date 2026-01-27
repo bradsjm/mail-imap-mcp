@@ -1,0 +1,267 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`tool contracts > exposes stable tool list with input schemas 1`] = `
+[
+  {
+    "description": "List configured IMAP accounts and their non-secret connection details (host, port, secure).",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object",
+    },
+    "name": "imap_list_accounts",
+  },
+  {
+    "description": "List mailboxes for an IMAP account. Use this to discover valid mailbox names (e.g., INBOX). If account_id is omitted, defaults to 'default'. Returns a concise list.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "account_id": {
+          "default": "default",
+          "description": "Configured IMAP account identifier. Defaults to 'default' if omitted.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": "string",
+        },
+      },
+      "required": [
+        "account_id",
+      ],
+      "type": "object",
+    },
+    "name": "imap_list_mailboxes",
+  },
+  {
+    "description": "List or search messages in a mailbox by sender/subject/date/unread. If account_id is omitted, defaults to 'default'. Returns paginated summaries (token-efficient).",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "account_id": {
+          "default": "default",
+          "description": "Configured IMAP account identifier. Defaults to 'default' if omitted.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": "string",
+        },
+        "end_date": {
+          "description": "Date in YYYY-MM-DD format.",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "type": "string",
+        },
+        "from": {
+          "description": "Filter by sender email or display name substring.",
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string",
+        },
+        "include_snippet": {
+          "default": false,
+          "description": "If true, include a short body snippet in each message summary (may require extra IO).",
+          "type": "boolean",
+        },
+        "last_days": {
+          "description": "Search only messages from the last N days (UTC, inclusive).",
+          "maximum": 365,
+          "minimum": 1,
+          "type": "integer",
+        },
+        "limit": {
+          "default": 10,
+          "description": "Maximum number of items to return (1-50).",
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer",
+        },
+        "mailbox": {
+          "description": "Mailbox name (e.g., INBOX).",
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string",
+        },
+        "page_token": {
+          "description": "Opaque pagination token from a previous response.",
+          "maxLength": 2048,
+          "minLength": 1,
+          "type": "string",
+        },
+        "query": {
+          "description": "Free-text search across headers and body (server-dependent).",
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string",
+        },
+        "snippet_max_chars": {
+          "default": 200,
+          "description": "Maximum snippet length when include_snippet is true (50-500).",
+          "maximum": 500,
+          "minimum": 50,
+          "type": "integer",
+        },
+        "start_date": {
+          "description": "Date in YYYY-MM-DD format.",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "type": "string",
+        },
+        "subject": {
+          "description": "Filter by subject substring.",
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string",
+        },
+        "to": {
+          "description": "Filter by recipient email or display name substring.",
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string",
+        },
+        "unread_only": {
+          "description": "If true, return only unread messages.",
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "account_id",
+        "mailbox",
+        "include_snippet",
+        "snippet_max_chars",
+        "limit",
+      ],
+      "type": "object",
+    },
+    "name": "imap_search_messages",
+  },
+  {
+    "description": "Fetch a single message by stable identifier and return headers + a bounded text snippet (optionally sanitized HTML). Can extract text from PDF attachments. If account_id is omitted, defaults to 'default'.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "account_id": {
+          "default": "default",
+          "description": "Configured IMAP account identifier. Defaults to 'default' if omitted.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": "string",
+        },
+        "attachment_text_max_chars": {
+          "default": 10000,
+          "description": "Maximum text length to extract from each PDF attachment when extract_attachment_text is true (100-50000).",
+          "maximum": 50000,
+          "minimum": 100,
+          "type": "integer",
+        },
+        "body_max_chars": {
+          "default": 2000,
+          "description": "Maximum number of body characters to return (100-20000).",
+          "maximum": 20000,
+          "minimum": 100,
+          "type": "integer",
+        },
+        "extract_attachment_text": {
+          "default": false,
+          "description": "If true, extract text from PDF attachments (may be slow).",
+          "type": "boolean",
+        },
+        "include_all_headers": {
+          "default": false,
+          "description": "If true, include all headers (may be large/noisy). Implies include_headers.",
+          "type": "boolean",
+        },
+        "include_headers": {
+          "default": true,
+          "description": "If true, include selected headers (From/To/Subject/Date).",
+          "type": "boolean",
+        },
+        "include_html": {
+          "default": false,
+          "description": "If true, include a sanitized HTML body variant when available.",
+          "type": "boolean",
+        },
+        "message_id": {
+          "description": "Stable IMAP message identifier.",
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string",
+        },
+      },
+      "required": [
+        "account_id",
+        "message_id",
+        "body_max_chars",
+        "include_headers",
+        "include_all_headers",
+        "include_html",
+        "extract_attachment_text",
+        "attachment_text_max_chars",
+      ],
+      "type": "object",
+    },
+    "name": "imap_get_message",
+  },
+  {
+    "description": "Fetch raw message source (RFC822) for a single message. If account_id is omitted, defaults to 'default'. Gated and size-limited; not returned by default.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "account_id": {
+          "default": "default",
+          "description": "Configured IMAP account identifier. Defaults to 'default' if omitted.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": "string",
+        },
+        "max_bytes": {
+          "default": 200000,
+          "description": "Maximum raw source bytes to return (1024-1000000).",
+          "maximum": 1000000,
+          "minimum": 1024,
+          "type": "integer",
+        },
+        "message_id": {
+          "description": "Stable IMAP message identifier.",
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string",
+        },
+      },
+      "required": [
+        "account_id",
+        "message_id",
+        "max_bytes",
+      ],
+      "type": "object",
+    },
+    "name": "imap_get_message_raw",
+  },
+  {
+    "description": "Verify IMAP connectivity and authentication for an account, and return server capabilities. If account_id is omitted, defaults to 'default'.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "account_id": {
+          "default": "default",
+          "description": "Configured IMAP account identifier. Defaults to 'default' if omitted.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": "string",
+        },
+      },
+      "required": [
+        "account_id",
+      ],
+      "type": "object",
+    },
+    "name": "imap_verify_account",
+  },
+]
+`;

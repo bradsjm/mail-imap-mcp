@@ -93,10 +93,12 @@ The server provides the following MCP tools:
 
 | Tool Name                   | Description                                 | Write Access |
 | --------------------------- | ------------------------------------------- | ------------ |
+| `imap_list_accounts`        | List configured accounts and server details | No           |
 | `imap_list_mailboxes`       | List available mailboxes for an account     | No           |
 | `imap_search_messages`      | Search messages with filters and pagination | No           |
 | `imap_get_message`          | Fetch message headers and body text         | No           |
 | `imap_get_message_raw`      | Fetch raw RFC822 message source             | No           |
+| `imap_verify_account`       | Verify connectivity and list capabilities   | No           |
 | `imap_update_message_flags` | Update message flags (read/unread, etc.)    | Yes          |
 | `imap_move_message`         | Move message to another mailbox             | Yes          |
 | `imap_delete_message`       | Delete a message (requires confirmation)    | Yes          |
@@ -119,6 +121,30 @@ To bridge tools and resources, some tool outputs include optional `message_uri`,
 resource directly.
 
 ### Tool Details
+
+#### `imap_list_accounts`
+
+Lists configured accounts along with non-secret connection details.
+
+**Parameters:** none
+
+**Example Response:**
+
+```json
+{
+  "summary": "Discovered 2 configured IMAP accounts.",
+  "data": {
+    "accounts": [
+      {
+        "account_id": "default",
+        "host": "imap.gmail.com",
+        "port": 993,
+        "secure": true
+      }
+    ]
+  }
+}
+```
 
 #### `imap_list_mailboxes`
 
@@ -211,6 +237,33 @@ Fetches the raw RFC822 message source. Size-limited for security.
 - `account_id` (optional, default: "default") - Account identifier
 - `message_id` (required) - Stable message identifier
 - `max_bytes` (optional, default: 1048576) - Maximum bytes to return
+
+#### `imap_verify_account`
+
+Verifies account connectivity/authentication and returns server capabilities.
+
+**Parameters:**
+
+- `account_id` (optional, default: "default") - Account identifier
+
+**Example Response:**
+
+```json
+{
+  "summary": "Verified IMAP connectivity for account 'default' in 120 ms.",
+  "data": {
+    "account_id": "default",
+    "ok": true,
+    "latency_ms": 120,
+    "server": {
+      "host": "imap.gmail.com",
+      "port": 993,
+      "secure": true
+    },
+    "capabilities": ["IMAP4rev1", "UIDPLUS"]
+  }
+}
+```
 
 #### `imap_update_message_flags`
 

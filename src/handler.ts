@@ -7,10 +7,12 @@ import {
   DeleteMessageInputSchema,
   GetMessageInputSchema,
   GetMessageRawInputSchema,
+  ListAccountsInputSchema,
   ListMailboxesInputSchema,
   MoveMessageInputSchema,
   SearchMessagesInputSchema,
   UpdateMessageFlagsInputSchema,
+  VerifyAccountInputSchema,
 } from './contracts.js';
 import { WRITE_ENABLED } from './config.js';
 import { WRITE_TOOLS } from './policy.js';
@@ -24,14 +26,17 @@ import {
 import { handleDeleteMessage } from './tools/delete_message.js';
 import { handleGetMessage } from './tools/get_message.js';
 import { handleGetMessageRaw } from './tools/get_message_raw.js';
+import { handleListAccounts } from './tools/list_accounts.js';
 import { handleListMailboxes } from './tools/list_mailboxes.js';
 import { handleMoveMessage } from './tools/move_message.js';
 import { handleSearchMessages } from './tools/search_messages.js';
 import { handleUpdateMessageFlags } from './tools/update_message_flags.js';
+import { handleVerifyAccount } from './tools/verify_account.js';
 import { scrubSecrets } from './logging.js';
 import { getAvailableTools } from './utils/tools.js';
 
 const TOOL_INPUT_SCHEMAS: Readonly<Record<ToolName, z.ZodTypeAny>> = {
+  imap_list_accounts: ListAccountsInputSchema,
   imap_list_mailboxes: ListMailboxesInputSchema,
   imap_search_messages: SearchMessagesInputSchema,
   imap_get_message: GetMessageInputSchema,
@@ -39,6 +44,7 @@ const TOOL_INPUT_SCHEMAS: Readonly<Record<ToolName, z.ZodTypeAny>> = {
   imap_update_message_flags: UpdateMessageFlagsInputSchema,
   imap_move_message: MoveMessageInputSchema,
   imap_delete_message: DeleteMessageInputSchema,
+  imap_verify_account: VerifyAccountInputSchema,
 };
 
 /**
@@ -107,6 +113,8 @@ export async function handleToolCall(toolName: ToolName, rawArgs: unknown): Prom
     }
 
     switch (toolName) {
+      case 'imap_list_accounts':
+        return handleListAccounts(ListAccountsInputSchema.parse(rawArgs));
       case 'imap_list_mailboxes':
         return await handleListMailboxes(ListMailboxesInputSchema.parse(rawArgs));
       case 'imap_search_messages':
@@ -121,6 +129,8 @@ export async function handleToolCall(toolName: ToolName, rawArgs: unknown): Prom
         return await handleDeleteMessage(DeleteMessageInputSchema.parse(rawArgs));
       case 'imap_get_message_raw':
         return await handleGetMessageRaw(GetMessageRawInputSchema.parse(rawArgs));
+      case 'imap_verify_account':
+        return await handleVerifyAccount(VerifyAccountInputSchema.parse(rawArgs));
       default:
         // This should never happen if TOOL_DEFINITIONS is kept in sync with handlers
         return makeError(`Tool '${String(toolName)}' is registered but not implemented yet.`);
