@@ -6,7 +6,7 @@ below to keep changes consistent, testable, and easy to review.
 ## Project Structure & Module Organization
 
 - `src/` contains the server entry point and core logic.
-- `src/**/*.test.ts` contains Vitest unit tests.
+- `tests*/*.test.ts` contains Vitest unit tests.
 - `dist/` is the build output (generated).
 - `docs/` holds supplementary documentation.
 
@@ -41,7 +41,7 @@ Avoid committing secrets or `.env` files. Use local environment configuration in
 
 ## Testing Guidelines
 
-- Tests use Vitest (`vitest.config.ts` includes `src/**/*.test.ts`).
+- Tests use Vitest (`vitest.config.ts`).
 - Name tests descriptively and cover core tool behavior and edge cases.
 - Run tests with `pnpm test` or the full suite with `pnpm check`.
 
