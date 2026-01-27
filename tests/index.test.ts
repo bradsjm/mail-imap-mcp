@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  CopyMessageInputSchema,
   DeleteMessageInputSchema,
   GetMessageInputSchema,
   ListAccountsInputSchema,
@@ -93,6 +94,35 @@ describe('tool contracts', () => {
     const result = UpdateMessageFlagsInputSchema.safeParse({
       account_id: 'default',
       message_id: 'imap:default:INBOX:1:2',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('validates copy message input in same account', () => {
+    const result = CopyMessageInputSchema.safeParse({
+      account_id: 'default',
+      message_id: 'imap:default:INBOX:1:2',
+      destination_mailbox: 'Archive',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('validates copy message input across accounts', () => {
+    const result = CopyMessageInputSchema.safeParse({
+      account_id: 'default',
+      destination_account_id: 'work',
+      message_id: 'imap:default:INBOX:1:2',
+      destination_mailbox: 'INBOX',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects copy message input with invalid destination account id', () => {
+    const result = CopyMessageInputSchema.safeParse({
+      account_id: 'default',
+      destination_account_id: 'bad:id',
+      message_id: 'imap:default:INBOX:1:2',
+      destination_mailbox: 'Archive',
     });
     expect(result.success).toBe(false);
   });

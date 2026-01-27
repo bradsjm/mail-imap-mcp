@@ -100,6 +100,7 @@ The server provides the following MCP tools:
 | `imap_get_message_raw`      | Fetch raw RFC822 message source             | No           |
 | `imap_verify_account`       | Verify connectivity and list capabilities   | No           |
 | `imap_update_message_flags` | Update message flags (read/unread, etc.)    | Yes          |
+| `imap_copy_message`         | Copy message to mailbox/account             | Yes          |
 | `imap_move_message`         | Move message to another mailbox             | Yes          |
 | `imap_delete_message`       | Delete a message (requires confirmation)    | Yes          |
 
@@ -276,6 +277,17 @@ Adds or removes flags on a message (e.g., mark as read/unread). Requires `MAIL_I
 - `add_flags` (optional) - Flags to add (e.g., `["\\Seen"]`)
 - `remove_flags` (optional) - Flags to remove
 
+#### `imap_copy_message`
+
+Copies a message to another mailbox, either within the same account or across configured accounts. Requires `MAIL_IMAP_WRITE_ENABLED=true`.
+
+**Parameters:**
+
+- `account_id` (optional, default: "default") - Source account identifier
+- `message_id` (required) - Stable message identifier
+- `destination_mailbox` (required) - Destination mailbox name
+- `destination_account_id` (optional) - Destination account identifier (defaults to `account_id`)
+
 #### `imap_move_message`
 
 Moves a message to another mailbox. Uses IMAP MOVE if supported, otherwise COPY+DELETE. Requires `MAIL_IMAP_WRITE_ENABLED=true`.
@@ -284,7 +296,7 @@ Moves a message to another mailbox. Uses IMAP MOVE if supported, otherwise COPY+
 
 - `account_id` (optional, default: "default") - Account identifier
 - `message_id` (required) - Stable message identifier
-- `target_mailbox` (required) - Destination mailbox name
+- `destination_mailbox` (required) - Destination mailbox name
 
 #### `imap_delete_message`
 

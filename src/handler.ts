@@ -4,6 +4,7 @@ import {
   TOOL_DEFINITIONS,
   type ToolDefinition,
   type ToolName,
+  CopyMessageInputSchema,
   DeleteMessageInputSchema,
   GetMessageInputSchema,
   GetMessageRawInputSchema,
@@ -28,6 +29,7 @@ import { handleGetMessage } from './tools/get_message.js';
 import { handleGetMessageRaw } from './tools/get_message_raw.js';
 import { handleListAccounts } from './tools/list_accounts.js';
 import { handleListMailboxes } from './tools/list_mailboxes.js';
+import { handleCopyMessage } from './tools/copy_message.js';
 import { handleMoveMessage } from './tools/move_message.js';
 import { handleSearchMessages } from './tools/search_messages.js';
 import { handleUpdateMessageFlags } from './tools/update_message_flags.js';
@@ -42,6 +44,7 @@ const TOOL_INPUT_SCHEMAS: Readonly<Record<ToolName, z.ZodTypeAny>> = {
   imap_get_message: GetMessageInputSchema,
   imap_get_message_raw: GetMessageRawInputSchema,
   imap_update_message_flags: UpdateMessageFlagsInputSchema,
+  imap_copy_message: CopyMessageInputSchema,
   imap_move_message: MoveMessageInputSchema,
   imap_delete_message: DeleteMessageInputSchema,
   imap_verify_account: VerifyAccountInputSchema,
@@ -123,6 +126,8 @@ export async function handleToolCall(toolName: ToolName, rawArgs: unknown): Prom
         return await handleGetMessage(GetMessageInputSchema.parse(rawArgs));
       case 'imap_update_message_flags':
         return await handleUpdateMessageFlags(UpdateMessageFlagsInputSchema.parse(rawArgs));
+      case 'imap_copy_message':
+        return await handleCopyMessage(CopyMessageInputSchema.parse(rawArgs));
       case 'imap_move_message':
         return await handleMoveMessage(MoveMessageInputSchema.parse(rawArgs));
       case 'imap_delete_message':

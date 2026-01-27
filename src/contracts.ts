@@ -15,6 +15,7 @@ export type ToolName =
   | 'imap_get_message'
   | 'imap_get_message_raw'
   | 'imap_update_message_flags'
+  | 'imap_copy_message'
   | 'imap_move_message'
   | 'imap_delete_message'
   | 'imap_verify_account';
@@ -381,6 +382,25 @@ export const UpdateMessageFlagsInputSchema = z
   });
 
 /**
+ * Input schema for the imap_copy_message tool.
+ *
+ * Copies a message to another mailbox. The destination may be within the same
+ * account or a different configured account. Cross-account copies are
+ * implemented by downloading the raw message source and appending it to the
+ * destination mailbox.
+ */
+export const CopyMessageInputSchema = z
+  .object({
+    account_id: DefaultAccountIdSchema,
+    message_id: MessageIdSchema,
+    destination_mailbox: MailboxSchema,
+    destination_account_id: AccountIdSchema.optional().describe(
+      'Destination account identifier. Defaults to the source account_id when omitted.',
+    ),
+  })
+  .strict();
+
+/**
  * Input schema for the imap_move_message tool.
  *
  * Moves a message from one mailbox to another. This operation removes the
@@ -641,6 +661,24 @@ export const UpdateMessageFlagsResultSchema = z
   .strict();
 
 /**
+ * Output schema for the copy_message tool.
+ *
+ * Returns confirmation that a message was copied, including source and
+ * destination accounts and mailboxes. If the server supports UIDPLUS for the
+ * chosen strategy, the new message ID for the copied message is also provided.
+ */
+export const CopyMessageResultSchema = z
+  .object({
+    source_account_id: AccountIdSchema,
+    destination_account_id: AccountIdSchema,
+    source_mailbox: MailboxSchema,
+    destination_mailbox: MailboxSchema,
+    message_id: MessageIdSchema,
+    new_message_id: MessageIdSchema.optional(),
+  })
+  .strict();
+
+/**
  * Output schema for the move_message tool.
  *
  * Returns confirmation that a message was moved, including source and
@@ -711,6 +749,7 @@ export const VerifyAccountResultSchema = z
  * - imap_get_message: Retrieve parsed message content
  * - imap_get_message_raw: Retrieve raw RFC822 source
  * - imap_update_message_flags: Modify message flags/labels
+ * - imap_copy_message: Copy a message to another mailbox/account
  * - imap_move_message: Move message to another mailbox
  * - imap_delete_message: Permanently delete a message
  */
@@ -756,6 +795,13 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
       "Update flags on a message (e.g., mark read/unread). If account_id is omitted, defaults to 'default'. Write operations are disabled by default.",
     inputSchema: UpdateMessageFlagsInputSchema,
     outputSchema: UpdateMessageFlagsResultSchema,
+  },
+  {
+    name: 'imap_copy_message',
+    description:
+      'Copy a message to another mailbox, optionally across configured accounts. If destination_account_id is omitted, the copy stays within the same account. Write operations are disabled by default.',
+    inputSchema: CopyMessageInputSchema,
+    outputSchema: CopyMessageResultSchema,
   },
   {
     name: 'imap_move_message',
