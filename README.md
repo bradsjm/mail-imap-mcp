@@ -104,6 +104,64 @@ The server provides the following MCP tools:
 | `imap_move_message`         | Move message to another mailbox             | Yes          |
 | `imap_delete_message`       | Delete a message (requires confirmation)    | Yes          |
 
+## Prompts (Phishing Triage)
+
+The server also exposes MCP prompts (`prompts/list`, `prompts/get`) that help an agent
+analyze potentially malicious emails while staying within safe guardrails.
+
+Prompt names:
+
+- `phishing-triage-json` — All-purpose detection prompt with auditable JSON output.
+- `phishing-header-spoofing-check` — Header-first spoofing and SPF/DKIM/DMARC alignment review.
+- `phishing-url-cta-risk` — Extracts calls-to-action and URLs and scores link risk.
+- `phishing-premise-alignment` — Checks for BEC-style premise misalignment and process anomalies.
+- `phishing-user-facing-explanation` — Plain-language explanation and safe next steps.
+- `classify-email-destination` — Auto-discovers valid mailbox destinations and chooses one safely.
+- `classify-email-destination-scored` — Scores each discovered destination 0-3 before choosing.
+- `classify-email-destination-thread-aware` — Preserves a prior thread destination unless clearly reclassified.
+
+These prompts are designed to work with the existing tools. Each prompt instructs the model
+to fetch context using `imap_list_mailboxes` (to discover allowed destinations),
+`imap_get_message` (headers-first context), and optionally `imap_search_messages`
+for history-based routing patterns.
+
+Example `prompts/get` request:
+
+```json
+{
+  "method": "prompts/get",
+  "params": {
+    "name": "phishing-triage-json",
+    "arguments": {
+      "account_id": "default",
+      "message_id": "imap:default:INBOX:123:456",
+      "body_max_chars": 4000,
+      "raw_max_bytes": 200000
+    }
+  }
+}
+```
+
+Example classification `prompts/get` request (auto-discovers allowed destinations):
+
+```json
+{
+  "method": "prompts/get",
+  "params": {
+    "name": "classify-email-destination-scored",
+    "arguments": {
+      "account_id": "default",
+      "message_id": "imap:default:INBOX:123:456",
+      "fallback_mailbox": "default",
+      "fallback_folder": "Review/Unsorted",
+      "body_max_chars": "4000",
+      "history_mailbox": "Archive",
+      "history_limit": "5"
+    }
+  }
+}
+```
+
 ## Resources (Optional)
 
 Some MCP clients can browse/read server-provided Resources (`resources/list`, `resources/read`). This

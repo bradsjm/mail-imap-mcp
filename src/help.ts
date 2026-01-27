@@ -121,6 +121,17 @@ export function getHelpText(): string {
     ),
   );
   lines.push('');
+  lines.push('  Prompts:');
+  lines.push('  The server also exposes phishing triage prompts via prompts/list and prompts/get.');
+  lines.push('  - phishing-triage-json');
+  lines.push('  - phishing-header-spoofing-check');
+  lines.push('  - phishing-url-cta-risk');
+  lines.push('  - phishing-premise-alignment');
+  lines.push('  - phishing-user-facing-explanation');
+  lines.push('  - classify-email-destination');
+  lines.push('  - classify-email-destination-scored');
+  lines.push('  - classify-email-destination-thread-aware');
+  lines.push('');
 
   return lines.join('\n');
 }
