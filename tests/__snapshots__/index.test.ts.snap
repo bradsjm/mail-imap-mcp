@@ -48,6 +48,12 @@ exports[`tool contracts > exposes stable tool list with input schemas 1`] = `
           "pattern": "^[A-Za-z0-9_-]+$",
           "type": "string",
         },
+        "cursor": {
+          "description": "Opaque pagination cursor from a previous response.",
+          "maxLength": 2048,
+          "minLength": 1,
+          "type": "string",
+        },
         "end_date": {
           "description": "Date in YYYY-MM-DD format.",
           "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
@@ -80,12 +86,6 @@ exports[`tool contracts > exposes stable tool list with input schemas 1`] = `
         "mailbox": {
           "description": "Mailbox name (e.g., INBOX).",
           "maxLength": 256,
-          "minLength": 1,
-          "type": "string",
-        },
-        "page_token": {
-          "description": "Opaque pagination token from a previous response.",
-          "maxLength": 2048,
           "minLength": 1,
           "type": "string",
         },

@@ -139,17 +139,17 @@ const LimitSchema = z
   .describe('Maximum number of items to return (1-50).');
 
 /**
- * Schema for validating pagination tokens.
+ * Schema for validating pagination cursors.
  *
- * Page tokens are opaque strings returned by search operations that allow
+ * Cursors are opaque strings returned by search operations that allow
  * fetching subsequent pages of results. They encode search state including
  * matched UIDs, current offset, and expiration time.
  */
-const PageTokenSchema = z
+const CursorSchema = z
   .string()
   .min(1)
   .max(2048)
-  .describe('Opaque pagination token from a previous response.');
+  .describe('Opaque pagination cursor from a previous response.');
 
 /**
  * Schema for validating IMAP message flags.
@@ -238,7 +238,7 @@ export const SearchMessagesInputSchema = z
       .default(200)
       .describe('Maximum snippet length when include_snippet is true (50-500).'),
     limit: LimitSchema,
-    page_token: PageTokenSchema.optional(),
+    cursor: CursorSchema.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -601,7 +601,8 @@ export const SearchMessagesResultSchema = z
     mailbox: MailboxSchema,
     total: z.number().int().nonnegative().optional(),
     messages: z.array(MessageSummarySchema).max(50),
-    next_page_token: PageTokenSchema.optional(),
+    next_cursor: CursorSchema.optional(),
+    has_more: z.boolean(),
   })
   .strict();
 

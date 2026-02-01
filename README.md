@@ -241,7 +241,7 @@ Searches for messages in a mailbox with flexible filtering and pagination.
 - `start_date` (optional) - Search from this date (ISO 8601)
 - `end_date` (optional) - Search until this date (ISO 8601)
 - `limit` (optional, default: 10) - Maximum results per page
-- `page_token` (optional) - Pagination token from previous search
+- `cursor` (optional) - Pagination cursor from previous search
 
 **Example Response:**
 
@@ -261,7 +261,8 @@ Searches for messages in a mailbox with flexible filtering and pagination.
         "flags": ["\\Seen"]
       }
     ],
-    "next_page_token": "..."
+    "next_cursor": "...",
+    "has_more": true
   }
 }
 ```
@@ -421,7 +422,7 @@ All tool responses follow a consistent JSON structure:
 
 ## Pagination
 
-The `imap_search_messages` tool supports pagination through an opaque `next_page_token`:
+The `imap_search_messages` tool supports pagination through an opaque `next_cursor`:
 
 ```
 ┌──────────────┐
@@ -432,13 +433,13 @@ The `imap_search_messages` tool supports pagination through an opaque `next_page
        ▼
 ┌──────────────┐
 │   Page 1     │
-│ + next_token │
+│ + next_cursor │
 └──────┬───────┘
        │
        ▼
 ┌──────────────┐
 │   Page 2     │
-│ + next_token │
+│ + next_cursor │
 └──────┬───────┘
        │
        ▼

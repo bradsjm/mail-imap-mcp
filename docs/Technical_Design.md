@@ -41,7 +41,7 @@ This TDS is phased so the server becomes useful early (read-only “browse/searc
 - **Tool count:** recommended 5–10; hard cap 15.
 - **Outcome-oriented tools:** each tool maps to a complete user capability.
 - **Input schemas:** flat inputs; constrain strings/arrays with bounds and enums where possible.
-- **Outputs:** concise summaries; paginate after ~10 items with `next_page_token`.
+- **Outputs:** concise summaries; paginate after ~10 items with `next_cursor`.
 - **Security:** never return secrets; require `confirm: true` for destructive actions; least privilege; audit log all tool calls with scrubbed arguments.
 - **Versioning:** semantic versioning; tool names + required fields are the public API.
 - **Testing:** validate success paths, schema violations, pagination stability, confirmation behavior, and token efficiency.
@@ -75,12 +75,12 @@ Target: 7 tools (read + minimal write), leaving room for future expansion withou
 ### 7.2 Common conventions
 
 - All tools accept `account_id: string`.
-- All list/search tools accept `limit` (default 10, max 50) and `page_token?: string`.
+- All list/search tools accept `limit` (default 10, max 50) and `cursor?: string`.
 - Prefer accepting a stable `message_id` instead of raw IMAP identifiers; if raw IDs are exposed, keep them explicit (e.g., `uid`, `uidvalidity`) and never overload meanings.
 - All tools return:
   - A human-readable summary in `content[0].text`
   - Optional machine-parsable JSON in a second `content` item only when necessary (avoid by default)
-  - `_meta.next_page_token` when more results exist
+  - `_meta.next_cursor` when more results exist
 - Message bodies are truncated by default (`body_max_chars`), with explicit opt-in for more.
 
 ### 7.3 Example schemas (indicative; finalize in Phase 0)
@@ -96,7 +96,7 @@ Inputs:
 - `unread_only` (optional boolean)
 - `start_date` / `end_date` (optional; `format: "date"`)
 - `limit` (optional int; default 10; max 50)
-- `page_token` (optional string)
+- `cursor` (optional string)
 
 Output (text summary):
 
@@ -139,9 +139,9 @@ Notes:
 
 ### 8.2 Pagination strategy (stdio-safe)
 
-Because stdio MCP servers are typically stateless across processes, `page_token` must be self-contained or reference an in-memory cache:
+Because stdio MCP servers are typically stateless across processes, `cursor` must be self-contained or reference an in-memory cache:
 
-- **Preferred (stable + compact):** cache the UID result set in-process keyed by an opaque cursor id (TTL-bounded), and return that cursor as `page_token`.
+- **Preferred (stable + compact):** cache the UID result set in-process keyed by an opaque cursor id (TTL-bounded), and return that cursor as `cursor`.
 - **Fallback (fully self-contained):** encode `{ mailbox, query, sort, offset, snapshot: { uidvalidity, uidnext } }` in the token; if the snapshot changes, return a warning and proceed best-effort.
 
 ## 9) Security & Privacy

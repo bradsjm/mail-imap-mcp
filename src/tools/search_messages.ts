@@ -11,14 +11,14 @@ import { encodeMessageId } from '../message-id.js';
  * pagination to handle large result sets efficiently.
  *
  * The tool performs the following steps:
- * 1. Validates that search filters are not combined with page_token (invalid operation)
+ * 1. Validates that search filters are not combined with cursor (invalid operation)
  * 2. Validates that the account is properly configured
  * 3. Establishes an IMAP connection and obtains a read lock on the mailbox
- * 4. If page_token is provided:
+ * 4. If cursor is provided:
  *    - Retrieves the cursor and validates it (not expired, matches account/mailbox)
  *    - Verifies the mailbox hasn't changed (UIDVALIDITY still matches)
  *    - Uses the cursor's UID ranges for pagination
- * 5. If no page_token:
+ * 5. If no cursor:
  *    - Builds an IMAP SEARCH query from the provided filters
  *    - Executes the search to get matching UIDs
  *    - Sorts UIDs in descending order (newest first)
@@ -26,7 +26,7 @@ import { encodeMessageId } from '../message-id.js';
  *    - Creates a cursor for pagination (or disables pagination if too many matches)
  * 6. Fetches message metadata for the requested page of messages
  * 7. Optionally extracts and includes body snippets for each message
- * 8. Returns the page of results with a next_page_token if more results exist
+ * 8. Returns the page of results with a next_cursor if more results exist
  * 9. If the cursor becomes outdated or expired, invalidates it
  *
  * Pagination details:
@@ -58,14 +58,15 @@ import { encodeMessageId } from '../message-id.js';
  * //   mailbox: 'INBOX',
  * //   total: 25,
  * //   messages: [...10 messages...],
- * //   next_page_token: 'uuid-of-cursor'
+ * //   next_cursor: 'uuid-of-cursor',
+ * //   has_more: true
  * // }
  *
  * // Next page
  * const nextResult = await handleSearchMessages({
  *   account_id: 'default',
  *   mailbox: 'INBOX',
- *   page_token: 'uuid-of-cursor',
+ *   cursor: 'uuid-of-cursor',
  *   limit: 10
  * });
  * // Returns: {
@@ -73,12 +74,13 @@ import { encodeMessageId } from '../message-id.js';
  * //   mailbox: 'INBOX',
  * //   total: 25,
  * //   messages: [...next 10 messages...],
- * //   next_page_token: 'another-uuid' // or undefined if end of results
+ * //   next_cursor: 'another-uuid', // or undefined if end of results
+ * //   has_more: true
  * // }
  * ```
  *
  * @param args - The validated input arguments containing search filters and pagination options
- * @returns A ToolResult containing the search results, pagination token, or an error message
+ * @returns A ToolResult containing the search results, pagination cursor, or an error message
  */
 import {
   buildSearchQuery,
@@ -109,11 +111,11 @@ import { messageRawResourceUri, messageResourceUri } from '../resources/uri.js';
 export async function handleSearchMessages(
   args: z.infer<typeof SearchMessagesInputSchema>,
 ): Promise<ToolResult> {
-  // Validate that page_token is not combined with search filters
-  // This would be an invalid operation because page_token represents a specific
+  // Validate that cursor is not combined with search filters
+  // This would be an invalid operation because cursor represents a specific
   // snapshot of search results, and additional filters would require a new search
   if (
-    args.page_token &&
+    args.cursor &&
     (args.query ||
       args.from ||
       args.to ||
@@ -123,7 +125,7 @@ export async function handleSearchMessages(
       args.start_date ||
       args.end_date)
   ) {
-    return makeError('Do not combine page_token with additional search filters.');
+    return makeError('Do not combine cursor with additional search filters.');
   }
 
   // Validate that the account is configured before attempting to connect
@@ -135,7 +137,7 @@ export async function handleSearchMessages(
 
   return await withImapClient(account, async (client) => {
     // Obtain a read lock on the mailbox to search
-    // We don't specify expectedUidvalidity here because page_token handles that check
+    // We don't specify expectedUidvalidity here because cursor handles that check
     const lockResult = await openMailboxLock(client, args.mailbox, {
       readOnly: true,
       description: 'imap_search_messages',
@@ -145,15 +147,15 @@ export async function handleSearchMessages(
     }
     const { lock, uidvalidity: mailboxUidvalidity } = lockResult;
     try {
-      // If page_token is provided, retrieve the cursor and validate it
-      const cursor = args.page_token ? SEARCH_CURSOR_STORE.getSearchCursor(args.page_token) : null;
-      if (args.page_token && !cursor) {
-        return makeError('page_token is invalid or expired. Run the search again.');
+      // If cursor is provided, retrieve the cursor and validate it
+      const cursor = args.cursor ? SEARCH_CURSOR_STORE.getSearchCursor(args.cursor) : null;
+      if (args.cursor && !cursor) {
+        return makeError('cursor is invalid or expired. Run the search again.');
       }
       // Validate that the cursor matches the requested account and mailbox
       // This prevents using a cursor from one account/mailbox on another
       if (cursor && (cursor.account_id !== args.account_id || cursor.mailbox !== args.mailbox)) {
-        return makeError('page_token does not match the requested mailbox or account.');
+        return makeError('cursor does not match the requested mailbox or account.');
       }
       // Validate that the mailbox hasn't changed since the cursor was created
       // UIDVALIDITY changes when a mailbox is deleted and recreated, making old UIDs invalid
@@ -207,6 +209,7 @@ export async function handleSearchMessages(
               mailbox: args.mailbox,
               total: 0,
               messages: [],
+              has_more: false,
             },
             [],
             meta,
@@ -228,8 +231,8 @@ export async function handleSearchMessages(
       // Check if we've reached the end of results
       if (offset >= total) {
         // Clean up the cursor if we're at the end of pagination
-        if (args.page_token) {
-          SEARCH_CURSOR_STORE.delete(args.page_token);
+        if (args.cursor) {
+          SEARCH_CURSOR_STORE.delete(args.cursor);
         }
         const meta: Record<string, unknown> = {
           now_utc: nowUtcIso(),
@@ -247,6 +250,7 @@ export async function handleSearchMessages(
             mailbox: args.mailbox,
             total,
             messages: [],
+            has_more: false,
           },
           [],
           meta,
@@ -328,13 +332,13 @@ export async function handleSearchMessages(
 
       // Calculate the next offset and determine if we need a pagination token
       const nextOffset = offset + pageUids.length;
-      let nextToken: string | undefined;
+      let nextCursor: string | undefined;
       if (nextOffset < total && !paginationDisabled) {
         // More results available: create or update the cursor
-        if (args.page_token) {
+        if (args.cursor) {
           // Update existing cursor with new offset
-          const updated = SEARCH_CURSOR_STORE.updateSearchCursor(args.page_token, nextOffset);
-          nextToken = updated?.id ?? args.page_token;
+          const updated = SEARCH_CURSOR_STORE.updateSearchCursor(args.cursor, nextOffset);
+          nextCursor = updated?.id ?? args.cursor;
         } else {
           // Create a new cursor for the first page
           const created = SEARCH_CURSOR_STORE.createSearchCursor({
@@ -348,11 +352,11 @@ export async function handleSearchMessages(
             include_snippet: includeSnippet,
             snippet_max_chars: snippetMaxChars,
           });
-          nextToken = created.id;
+          nextCursor = created.id;
         }
-      } else if (args.page_token) {
+      } else if (args.cursor) {
         // End of pagination: clean up the cursor
-        SEARCH_CURSOR_STORE.delete(args.page_token);
+        SEARCH_CURSOR_STORE.delete(args.cursor);
       }
 
       // Create a helpful summary message
@@ -371,13 +375,13 @@ export async function handleSearchMessages(
         });
       }
       // Suggest fetching the next page if pagination is available
-      if (nextToken) {
+      if (nextCursor) {
         hints.push({
           tool: 'imap_search_messages',
           arguments: {
             account_id: args.account_id,
             mailbox: args.mailbox,
-            page_token: nextToken,
+            cursor: nextCursor,
           },
           reason: 'Retrieve the next page of results.',
         });
@@ -388,8 +392,8 @@ export async function handleSearchMessages(
         security_note: UNTRUSTED_EMAIL_CONTENT_NOTE,
         read_side_effects: 'none',
       };
-      if (nextToken) {
-        meta['next_page_token'] = nextToken;
+      if (nextCursor) {
+        meta['next_cursor'] = nextCursor;
       }
       // Include metadata about pagination state and search parameters
       if (paginationDisabled) {
@@ -413,7 +417,8 @@ export async function handleSearchMessages(
           mailbox: args.mailbox,
           total,
           messages: summaries,
-          next_page_token: nextToken,
+          next_cursor: nextCursor,
+          has_more: nextCursor !== undefined,
         },
         hints,
         meta,
