@@ -1,6 +1,6 @@
 {
   "name": "@bradsjm/mail-imap-mcp",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A TypeScript MCP (stdio) server that provides secure, outcome-oriented tools for searching, reading, and modifying email over IMAP.",
   "license": "MIT",
   "author": "jb@nrgup.net",
