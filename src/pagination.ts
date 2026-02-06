@@ -282,6 +282,10 @@ export class CursorStore {
     if (!cursor) {
       return null;
     }
+    if (!Number.isInteger(offset) || offset < 0 || offset > cursor.total) {
+      this.entries.delete(id);
+      return null;
+    }
     const updated: SearchCursor = { ...cursor, offset };
     this.entries.set(id, updated);
     return updated;

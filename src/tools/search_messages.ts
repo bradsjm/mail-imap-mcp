@@ -338,7 +338,10 @@ export async function handleSearchMessages(
         if (args.cursor) {
           // Update existing cursor with new offset
           const updated = SEARCH_CURSOR_STORE.updateSearchCursor(args.cursor, nextOffset);
-          nextCursor = updated?.id ?? args.cursor;
+          if (!updated) {
+            return makeError('cursor is invalid or expired. Run the search again.');
+          }
+          nextCursor = updated.id;
         } else {
           // Create a new cursor for the first page
           const created = SEARCH_CURSOR_STORE.createSearchCursor({

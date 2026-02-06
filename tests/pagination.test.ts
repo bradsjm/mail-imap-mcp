@@ -21,8 +21,8 @@ describe('CursorStore', () => {
     });
 
     expect(store.getSearchCursor(cursor.id)?.offset).toBe(3);
-    const updated = store.updateSearchCursor(cursor.id, 6);
-    expect(updated?.offset).toBe(6);
+    const updated = store.updateSearchCursor(cursor.id, 2);
+    expect(updated?.offset).toBe(2);
   });
 
   it('expires cursors after ttl', () => {
@@ -90,6 +90,24 @@ describe('CursorStore', () => {
 
     expect(store.getSearchCursor(first.id)).toBeNull();
     vi.useRealTimers();
+  });
+
+  it('rejects invalid cursor updates', () => {
+    const store = new CursorStore({ ttl_ms: 60_000, max_entries: 5 });
+    const cursor = store.createSearchCursor({
+      tool: 'imap_search_messages',
+      account_id: 'default',
+      mailbox: 'INBOX',
+      uidvalidity: 1,
+      uid_ranges: [{ min: 1, max: 3 }],
+      offset: 0,
+      total: 3,
+      include_snippet: false,
+      snippet_max_chars: 200,
+    });
+
+    expect(store.updateSearchCursor(cursor.id, -1)).toBeNull();
+    expect(store.getSearchCursor(cursor.id)).toBeNull();
   });
 
   it('converts UIDs to descending ranges and slices without expanding', () => {

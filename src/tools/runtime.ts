@@ -392,7 +392,20 @@ export async function withImapClient<T>(
       return await fn(client);
     } catch (error: unknown) {
       lastError = error;
-      if (!isTransientImapError(error) || attempt === maxAttempts) {
+      const transient = isTransientImapError(error);
+      if (transient && attempt < maxAttempts) {
+        console.error(
+          JSON.stringify({
+            level: 'warn',
+            event: 'imap_retry',
+            attempt,
+            max_attempts: maxAttempts,
+            delay_ms: 300 * attempt,
+            error: toErrorLog(error),
+          }),
+        );
+      }
+      if (!transient || attempt === maxAttempts) {
         throw error;
       }
       await client.logout().catch(() => undefined);
